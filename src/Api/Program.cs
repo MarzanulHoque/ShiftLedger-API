@@ -1,3 +1,4 @@
+using ShiftLedger.Api;
 using ShiftLedger.Application;
 using ShiftLedger.Infrastructure;
 
@@ -20,7 +21,13 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Problem-details error handling (400 validation, 409 concurrency, 422 business-rule).
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // ---------------------------------------------------------------------------
 // HTTP request pipeline
