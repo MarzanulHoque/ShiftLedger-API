@@ -113,16 +113,41 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
         entry.Properties.Where(p => p.IsModified && IsAuditable(p.Metadata.Name))
              .ToDictionary(p => p.Metadata.Name, p => p.OriginalValue);
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // Money: every decimal maps to DECIMAL(18,2). Never float/double.
+        configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
+        base.ConfigureConventions(configurationBuilder);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
-        // Hide soft-deleted rows globally for every ISoftDeletable entity.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
-            if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
+            var clrType = entityType.ClrType;
+
+            // Hide soft-deleted rows globally for every ISoftDeletable entity.
+            if (typeof(ISoftDeletable).IsAssignableFrom(clrType))
             {
-                ApplySoftDeleteFilterMethod.MakeGenericMethod(entityType.ClrType).Invoke(null, [modelBuilder]);
+                ApplySoftDeleteFilterMethod.MakeGenericMethod(clrType).Invoke(null, [modelBuilder]);
+            }
+
+            // Rule C1: RowVersion is the optimistic-concurrency token on every BaseEntity.
+            if (typeof(BaseEntity).IsAssignableFrom(clrType))
+            {
+                modelBuilder.Entity(clrType).Property(nameof(BaseEntity.RowVersion)).IsConcurrencyToken();
+            }
+
+            // Enums persist as their string name (VARCHAR), never MySQL's native ENUM.
+            foreach (var property in entityType.GetProperties())
+            {
+                var propertyType = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
+                if (propertyType.IsEnum)
+                {
+                    modelBuilder.Entity(clrType).Property(property.Name).HasConversion<string>().HasMaxLength(32);
+                }
             }
         }
 
