@@ -1,9 +1,13 @@
+using Microsoft.EntityFrameworkCore;
+using ShiftLedger.Domain.Entities;
+
 namespace ShiftLedger.Application.Common.Interfaces;
 
-// Abstraction the Application layer uses to reach persistence without depending on EF Core directly.
-// A DbSet<T> property is added here as each entity is introduced (P1-5 AuditLog, P1-8 OrgSettings, …).
-// Implemented by AppDbContext in Infrastructure (P1-3).
+// Persistence contract for the Application layer. A DbSet<T> is added per entity as phases introduce them.
+// Implemented by AppDbContext (Infrastructure).
 public interface IAppDbContext
 {
+    DbSet<AuditLog> AuditLogs { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

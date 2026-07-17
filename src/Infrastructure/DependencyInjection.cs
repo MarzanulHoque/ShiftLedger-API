@@ -18,6 +18,7 @@ public static class DependencyInjection
         // Explicit version so registration never opens a connection (unlike ServerVersion.AutoDetect).
         var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
 
+        services.AddSingleton(TimeProvider.System);
         services.AddDbContext<AppDbContext>(options => options.UseMySql(connectionString, serverVersion));
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
