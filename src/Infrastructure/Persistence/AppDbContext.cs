@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -26,8 +27,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
 
     private void CaptureChanges()
     {
-        RegenerateConcurrencyTokens();
-        WriteAuditLogs();
+        WriteAuditLogs();               // A1/A2 — capture the semantic Added/Modified/Deleted first
+        ApplySoftDeletes();             // convert Deleted -> Modified for ISoftDeletable
+        RegenerateConcurrencyTokens();  // C1 — bump token on all Modified (incl. just-soft-deleted)
     }
 
     // Rule C1: bump the concurrency token on every modified entity so a stale update fails (409).
@@ -38,6 +40,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
             if (entry.State == EntityState.Modified)
             {
                 entry.Entity.RowVersion = Guid.NewGuid();
+            }
+        }
+    }
+
+    // Soft delete: a deleted ISoftDeletable becomes an update that hides the row instead of removing it.
+    private void ApplySoftDeletes()
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        foreach (var entry in ChangeTracker.Entries<ISoftDeletable>())
+        {
+            if (entry.State == EntityState.Deleted)
+            {
+                entry.State = EntityState.Modified;
+                entry.Entity.IsDeleted = true;
+                entry.Entity.DeletedAtUtc = now;
             }
         }
     }
@@ -99,6 +116,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        // Hide soft-deleted rows globally for every ISoftDeletable entity.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
+            {
+                ApplySoftDeleteFilterMethod.MakeGenericMethod(entityType.ClrType).Invoke(null, [modelBuilder]);
+            }
+        }
+
         base.OnModelCreating(modelBuilder);
+    }
+
+    private static readonly MethodInfo ApplySoftDeleteFilterMethod =
+        typeof(AppDbContext).GetMethod(nameof(ApplySoftDeleteFilter), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static void ApplySoftDeleteFilter<TEntity>(ModelBuilder modelBuilder)
+        where TEntity : class, ISoftDeletable
+    {
+        modelBuilder.Entity<TEntity>().HasQueryFilter(e => !e.IsDeleted);
     }
 }
