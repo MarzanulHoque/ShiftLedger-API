@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage;
 using ShiftLedger.Application.Common.Interfaces;
 using ShiftLedger.Domain.Common;
 using ShiftLedger.Domain.Entities;
@@ -13,6 +14,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
 {
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<OrgSettings> OrgSettings => Set<OrgSettings>();
+
+    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+        => Database.BeginTransactionAsync(cancellationToken);
 
     public override int SaveChanges()
     {

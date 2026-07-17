@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ShiftLedger.Domain.Entities;
 
 namespace ShiftLedger.Application.Common.Interfaces;
@@ -11,4 +12,5 @@ public interface IAppDbContext
     DbSet<OrgSettings> OrgSettings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
 }
