@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
     : DbContext(options), IAppDbContext
 {
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<OrgSettings> OrgSettings => Set<OrgSettings>();
 
     public override int SaveChanges()
     {

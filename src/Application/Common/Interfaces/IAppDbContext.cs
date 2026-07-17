@@ -8,6 +8,7 @@ namespace ShiftLedger.Application.Common.Interfaces;
 public interface IAppDbContext
 {
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<OrgSettings> OrgSettings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
