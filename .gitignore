@@ -480,3 +480,10 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# --- ShiftLedger: environment-specific app settings (may contain secrets) ---
+# Base appsettings.json (no secrets) is committed. Copy *.example to create your local file,
+# or supply secrets via .NET user-secrets / environment variables.
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
