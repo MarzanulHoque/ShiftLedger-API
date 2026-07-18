@@ -29,6 +29,15 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// CORS for the Angular dev server (SPA on :4200 calling the API on :5184). In staging/production
+// the SPA is served same-origin behind a reverse proxy (docs/10), so this policy is dev-only.
+const string SpaCorsPolicy = "SpaDev";
+builder.Services.AddCors(options =>
+    options.AddPolicy(SpaCorsPolicy, policy =>
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod()));
+
 // Problem-details error handling (400 validation, 409 concurrency, 422 business-rule).
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -67,14 +76,20 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseCors(SpaCorsPolicy);
+}
+else
+{
+    // Only force HTTPS outside Development; the SPA dev server talks plain HTTP to :5184.
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-await DbSeeder.SeedAsync(app.Services);
+// In Development also seed demo accounts (admin + two employees) for the quick-login buttons.
+await DbSeeder.SeedAsync(app.Services, seedDemoData: app.Environment.IsDevelopment());
 
 app.Run();
 
