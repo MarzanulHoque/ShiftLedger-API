@@ -1,11 +1,12 @@
 using FluentValidation;
 using MediatR;
-using ShiftLedger.Application.Common.Messaging;
 using ShiftLedger.Application.Common.Models;
 
 namespace ShiftLedger.Application.Auth.Commands.Login;
 
-public record LoginCommand(string Email, string Password) : IRequest<AuthResult>, ITransactionalRequest;
+// Not transactional: on failed login we persist the failed-attempt counter, which an outer
+// transaction would roll back when the handler throws.
+public record LoginCommand(string Email, string Password) : IRequest<AuthResult>;
 
 public class LoginCommandValidator : AbstractValidator<LoginCommand>
 {
