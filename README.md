@@ -57,8 +57,16 @@ dotnet build ShiftLedger.slnx
 # run the API (Swagger UI at http://localhost:5184/swagger)
 dotnet run --project src/Api --launch-profile http
 
-# run all tests
+# run all tests (unit)
 dotnet test ShiftLedger.slnx
+```
+
+**Integration tests** run against a real MySQL using a dedicated `*_test` schema (created/dropped
+per run). Provide the connection via an env var pointing at that schema, e.g.:
+
+```bash
+ConnectionStrings__Default="server=localhost;port=3306;database=shiftledger_test;user=root;password=***" \
+  dotnet test tests/Api.IntegrationTests
 ```
 
 ### Configuration & secrets
