@@ -12,5 +12,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Email).HasMaxLength(256);
         builder.Property(u => u.PasswordHash).HasMaxLength(512);
         builder.HasIndex(u => u.Email).IsUnique(); // case-insensitive via MySQL default collation
+
+        builder.HasOne<Department>()
+            .WithMany()
+            .HasForeignKey(u => u.DepartmentId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

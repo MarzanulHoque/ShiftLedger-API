@@ -16,7 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Controllers (attribute-routed). Minimal APIs are intentionally NOT used — the
 // project standardises on controllers for the large endpoint map (see docs/02 §7).
-builder.Services.AddControllers();
+// Serialize/accept enums as their string names (matches the DB string storage and readable payloads).
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 
 // Swagger / OpenAPI. Swagger is the authoritative API contract, served at /swagger
 // in Development (see docs/04_API_Specification.md).

@@ -11,6 +11,7 @@ public interface IAppDbContext
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<ShiftLedger.Domain.Entities.OrgSettings> OrgSettings { get; }
     DbSet<User> Users { get; }
+    DbSet<Department> Departments { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<PasswordResetToken> PasswordResetTokens { get; }
 

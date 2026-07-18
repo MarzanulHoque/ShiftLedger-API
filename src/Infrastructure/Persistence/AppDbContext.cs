@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<OrgSettings> OrgSettings => Set<OrgSettings>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<Department> Departments => Set<Department>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 

@@ -34,6 +34,10 @@ public class GlobalExceptionHandler(IProblemDetailsService problemDetailsService
                 status = StatusCodes.Status401Unauthorized;
                 title = invalid.Message;
                 break;
+            case NotFoundException notFound:
+                status = StatusCodes.Status404NotFound;
+                title = notFound.Message;
+                break;
             case BusinessRuleException business:
                 status = StatusCodes.Status422UnprocessableEntity;
                 title = business.Message;
