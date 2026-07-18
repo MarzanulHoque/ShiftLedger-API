@@ -19,6 +19,7 @@ public static class DependencyInjection
         var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
 
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IPasswordHasher, Security.PasswordHasher>();
         services.AddDbContext<AppDbContext>(options => options.UseMySql(connectionString, serverVersion));
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
 

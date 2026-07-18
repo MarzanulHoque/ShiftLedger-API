@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
 {
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<OrgSettings> OrgSettings => Set<OrgSettings>();
+    public DbSet<User> Users => Set<User>();
 
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
         => Database.BeginTransactionAsync(cancellationToken);
