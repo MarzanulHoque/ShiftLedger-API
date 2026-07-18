@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ShiftLedger.Api.Controllers;
@@ -9,6 +10,7 @@ namespace ShiftLedger.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
+[AllowAnonymous]
 public class PingController : ControllerBase
 {
     /// <summary>Returns a simple liveness payload. GET /api/v1/ping</summary>
