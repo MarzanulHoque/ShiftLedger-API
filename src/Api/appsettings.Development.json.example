@@ -7,5 +7,12 @@
   },
   "ConnectionStrings": {
     "Default": "server=localhost;port=3306;database=shiftledger;user=root;password=CHANGE_ME"
+  },
+  "Jwt": {
+    "SigningKey": "CHANGE_ME_a_long_random_secret_min_32_chars"
+  },
+  "BootstrapAdmin": {
+    "Email": "admin@shiftledger.local",
+    "Password": "CHANGE_ME"
   }
 }

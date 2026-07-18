@@ -30,6 +30,10 @@ public class GlobalExceptionHandler(IProblemDetailsService problemDetailsService
                 status = StatusCodes.Status409Conflict;
                 title = "The record was changed by someone else. Reload and try again.";
                 break;
+            case InvalidCredentialsException invalid:
+                status = StatusCodes.Status401Unauthorized;
+                title = invalid.Message;
+                break;
             case BusinessRuleException business:
                 status = StatusCodes.Status422UnprocessableEntity;
                 title = business.Message;
