@@ -12,7 +12,7 @@ namespace ShiftLedger.Api.IntegrationTests.Bills;
 public class BillingTests(IntegrationTestFixture fixture)
 {
     private static async Task<Guid> CreateJobAsync(AppDbContext ctx) =>
-        await new CreateJobCommandHandler(ctx, TimeProvider.System).Handle(
+        await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx)).Handle(
             new CreateJobCommand("Tune-up", null, "Giant Escape 3", JobPriority.Medium, null, null, null), default);
 
     private async Task<(Guid JobId, Guid BillId)> CreateJobWithBillAsync()
@@ -80,7 +80,7 @@ public class BillingTests(IntegrationTestFixture fixture)
         {
             lineId = await new AddLineItemCommandHandler(ctx)
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Full service", 1m, 1500m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System)
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
                 .Handle(new SetBillPaidCommand(billId, true), default);
         }
 
@@ -109,7 +109,7 @@ public class BillingTests(IntegrationTestFixture fixture)
         {
             await new AddLineItemCommandHandler(ctx)
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Wheel truing", 1m, 400m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System)
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
                 .Handle(new SetBillPaidCommand(billId, true), default);
         }
 
@@ -122,7 +122,7 @@ public class BillingTests(IntegrationTestFixture fixture)
 
         await using (var ctx = fixture.CreateContext())
         {
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System)
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
                 .Handle(new SetBillPaidCommand(billId, false), default);
             // Unlocked again: an edit now succeeds.
             await new AddLineItemCommandHandler(ctx)
@@ -145,7 +145,7 @@ public class BillingTests(IntegrationTestFixture fixture)
         var (_, billId) = await CreateJobWithBillAsync();
 
         await using var ctx = fixture.CreateContext();
-        var pay = () => new SetBillPaidCommandHandler(ctx, TimeProvider.System)
+        var pay = () => new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
             .Handle(new SetBillPaidCommand(billId, true), default);
         await pay.Should().ThrowAsync<BusinessRuleException>();
     }
@@ -162,7 +162,7 @@ public class BillingTests(IntegrationTestFixture fixture)
             var add = new AddLineItemCommandHandler(ctx);
             await add.Handle(new AddLineItemCommand(unpaidBillId, LineItemType.Labor, "Gear indexing", 1m, 350m), default);
             await add.Handle(new AddLineItemCommand(paidBillId, LineItemType.Labor, "Flat fix", 1m, 200m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System)
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
                 .Handle(new SetBillPaidCommand(paidBillId, true), default);
         }
 

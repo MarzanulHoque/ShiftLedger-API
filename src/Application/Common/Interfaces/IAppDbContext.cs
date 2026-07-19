@@ -16,6 +16,7 @@ public interface IAppDbContext
     DbSet<JobComment> JobComments { get; }
     DbSet<Bill> Bills { get; }
     DbSet<BillLineItem> BillLineItems { get; }
+    DbSet<Notification> Notifications { get; }
     DbSet<EmployeeProfile> EmployeeProfiles { get; }
     DbSet<PayRate> PayRates { get; }
     DbSet<RefreshToken> RefreshTokens { get; }

@@ -28,7 +28,7 @@ public class CreateJobCommandValidator : AbstractValidator<CreateJobCommand>
     }
 }
 
-public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider)
+public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider, INotifier notifier)
     : IRequestHandler<CreateJobCommand, Guid>
 {
     public async Task<Guid> Handle(CreateJobCommand request, CancellationToken cancellationToken)
@@ -51,6 +51,11 @@ public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider
         };
         db.ServiceJobs.Add(job);
         await db.SaveChangesAsync(cancellationToken);
+
+        if (job.AssignedMechanicId is { } assignee)
+        {
+            await notifier.NotifyAsync(assignee, "JobAssigned", $"New job assigned to you: {job.Title}", cancellationToken);
+        }
         return job.Id;
     }
 

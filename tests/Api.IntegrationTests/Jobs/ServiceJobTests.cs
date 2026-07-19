@@ -32,7 +32,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         Guid jobId;
         await using (var ctx = fixture.CreateContext(TestCurrentUser.Admin(adminId)))
         {
-            jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx)).Handle(NewJob(), default);
         }
 
         await using var verify = fixture.CreateContext();
@@ -49,21 +49,21 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p4-admin-flow@test.local", Role.Admin);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
         }
 
         var admin = TestCurrentUser.Admin(adminId);
 
         await using (var ctx = fixture.CreateContext(admin))
         {
-            var jump = () => new ChangeJobStatusCommandHandler(ctx, admin)
+            var jump = () => new ChangeJobStatusCommandHandler(ctx, admin, TestNotifiers.For(ctx))
                 .Handle(new ChangeJobStatusCommand(jobId, JobStatus.Delivered), default);
             await jump.Should().ThrowAsync<BusinessRuleException>();
         }
 
         await using (var ctx = fixture.CreateContext(admin))
         {
-            await new ChangeJobStatusCommandHandler(ctx, admin)
+            await new ChangeJobStatusCommandHandler(ctx, admin, TestNotifiers.For(ctx))
                 .Handle(new ChangeJobStatusCommand(jobId, JobStatus.InProgress), default);
         }
 
@@ -81,19 +81,19 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         {
             adminId = await CreateUserAsync(setup, "p4-admin-assign@test.local", Role.Admin);
             mechanicId = await CreateUserAsync(setup, "p4-mech-assign@test.local", Role.Employee);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
         }
 
         await using (var ctx = fixture.CreateContext())
         {
-            var assignAdmin = () => new AssignMechanicCommandHandler(ctx)
+            var assignAdmin = () => new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx))
                 .Handle(new AssignMechanicCommand(jobId, adminId), default);
             await assignAdmin.Should().ThrowAsync<BusinessRuleException>();
         }
 
         await using (var ctx = fixture.CreateContext())
         {
-            await new AssignMechanicCommandHandler(ctx).Handle(new AssignMechanicCommand(jobId, mechanicId), default);
+            await new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx)).Handle(new AssignMechanicCommand(jobId, mechanicId), default);
         }
     }
 
@@ -106,7 +106,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         {
             mech1 = await CreateUserAsync(setup, "p4-mech1@test.local", Role.Employee);
             mech2 = await CreateUserAsync(setup, "p4-mech2@test.local", Role.Employee);
-            jobForMech1 = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(mech1), default);
+            jobForMech1 = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(mech1), default);
         }
 
         await using var verify = fixture.CreateContext();
@@ -132,7 +132,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p4-admin-del@test.local", Role.Admin);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
             await new DeleteJobCommandHandler(setup).Handle(new DeleteJobCommand(jobId), default);
         }
 
@@ -150,7 +150,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p4-admin-comment@test.local", Role.Admin);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
         }
 
         var admin = TestCurrentUser.Admin(adminId);

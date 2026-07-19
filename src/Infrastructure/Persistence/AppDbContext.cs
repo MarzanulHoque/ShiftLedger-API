@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
     public DbSet<JobComment> JobComments => Set<JobComment>();
     public DbSet<Bill> Bills => Set<Bill>();
     public DbSet<BillLineItem> BillLineItems => Set<BillLineItem>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<EmployeeProfile> EmployeeProfiles => Set<EmployeeProfile>();
     public DbSet<PayRate> PayRates => Set<PayRate>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();

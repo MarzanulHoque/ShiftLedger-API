@@ -9,7 +9,7 @@ namespace ShiftLedger.Application.Bills;
 // Flipping back to unpaid ("reopen") clears the stamp and unlocks edits (Rule B3 correction path).
 public record SetBillPaidCommand(Guid BillId, bool IsPaid) : IRequest;
 
-public class SetBillPaidCommandHandler(IAppDbContext db, TimeProvider timeProvider)
+public class SetBillPaidCommandHandler(IAppDbContext db, TimeProvider timeProvider, INotifier notifier)
     : IRequestHandler<SetBillPaidCommand>
 {
     public async Task Handle(SetBillPaidCommand request, CancellationToken cancellationToken)
@@ -30,5 +30,18 @@ public class SetBillPaidCommandHandler(IAppDbContext db, TimeProvider timeProvid
         bill.IsPaid = request.IsPaid;
         bill.PaidAtUtc = request.IsPaid ? timeProvider.GetUtcNow().UtcDateTime : null;
         await db.SaveChangesAsync(cancellationToken);
+
+        if (request.IsPaid)
+        {
+            var job = await db.ServiceJobs.AsNoTracking()
+                .Where(j => j.Id == bill.ServiceJobId)
+                .Select(j => new { j.Title, j.AssignedMechanicId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (job?.AssignedMechanicId is { } mechanic)
+            {
+                await notifier.NotifyAsync(mechanic, "BillPaid",
+                    $"Bill for job '{job.Title}' was marked paid.", cancellationToken);
+            }
+        }
     }
 }

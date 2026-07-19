@@ -33,14 +33,24 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.ICurrentUser, ShiftLedger.Api.Security.CurrentUser>();
 
-// CORS for the Angular dev server (SPA on :4200 calling the API on :5184). In staging/production
+// In-app notifications (P6): persisted rows + real-time push over SignalR.
+builder.Services.AddSignalR();
+builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.INotifier, ShiftLedger.Application.Notifications.Notifier>();
+builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.IRealtimePusher, ShiftLedger.Api.Realtime.SignalRPusher>();
+
+// Report downloads (P6): PDF via QuestPDF, Excel via ClosedXML.
+builder.Services.AddSingleton<ShiftLedger.Application.Common.Interfaces.IReportExporter, ShiftLedger.Infrastructure.Reports.ReportExporter>();
+
+// CORS for the React/Vite dev server (SPA on :5173 calling the API on :5184). In staging/production
 // the SPA is served same-origin behind a reverse proxy (docs/10), so this policy is dev-only.
+// AllowCredentials is required for the SignalR negotiate handshake.
 const string SpaCorsPolicy = "SpaDev";
 builder.Services.AddCors(options =>
     options.AddPolicy(SpaCorsPolicy, policy =>
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins("http://localhost:5173")
               .AllowAnyHeader()
-              .AllowAnyMethod()));
+              .AllowAnyMethod()
+              .AllowCredentials()));
 
 // Problem-details error handling (400 validation, 409 concurrency, 422 business-rule).
 builder.Services.AddProblemDetails();
@@ -60,6 +70,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
+        };
+
+        // SignalR WebSockets can't send an Authorization header — the client passes the JWT as
+        // ?access_token=… on hub paths only (standard ASP.NET Core pattern).
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            },
         };
     });
 // Every endpoint requires an authenticated user by default; opt out with [AllowAnonymous].
@@ -91,6 +117,7 @@ else
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<ShiftLedger.Api.Realtime.NotificationsHub>("/hubs/notifications");
 
 // In Development also seed demo accounts (admin + two employees) for the quick-login buttons.
 await DbSeeder.SeedAsync(app.Services, seedDemoData: app.Environment.IsDevelopment());

@@ -9,7 +9,7 @@ namespace ShiftLedger.Application.Jobs;
 // Advance (or, for an Admin, correct) a job's status. Rule J1 governs which moves are legal.
 public record ChangeJobStatusCommand(Guid Id, JobStatus NewStatus) : IRequest;
 
-public class ChangeJobStatusCommandHandler(IAppDbContext db, ICurrentUser currentUser)
+public class ChangeJobStatusCommandHandler(IAppDbContext db, ICurrentUser currentUser, INotifier notifier)
     : IRequestHandler<ChangeJobStatusCommand>
 {
     public async Task Handle(ChangeJobStatusCommand request, CancellationToken cancellationToken)
@@ -31,5 +31,13 @@ public class ChangeJobStatusCommandHandler(IAppDbContext db, ICurrentUser curren
 
         job.Status = request.NewStatus;
         await db.SaveChangesAsync(cancellationToken);
+
+        // Notify the assigned mechanic when someone else (the owner) moved their job. The owner
+        // watches the dashboard, so mechanic-made changes raise no notification in v1.
+        if (job.AssignedMechanicId is { } mechanic && mechanic != currentUser.UserId)
+        {
+            await notifier.NotifyAsync(mechanic, "JobStatusChanged",
+                $"Job '{job.Title}' moved to {request.NewStatus}.", cancellationToken);
+        }
     }
 }

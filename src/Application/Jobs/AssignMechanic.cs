@@ -8,7 +8,7 @@ namespace ShiftLedger.Application.Jobs;
 // Assign or reassign a job's mechanic (Admin). Rule J2: the assignee must be an Employee-role user.
 public record AssignMechanicCommand(Guid Id, Guid MechanicId) : IRequest;
 
-public class AssignMechanicCommandHandler(IAppDbContext db) : IRequestHandler<AssignMechanicCommand>
+public class AssignMechanicCommandHandler(IAppDbContext db, INotifier notifier) : IRequestHandler<AssignMechanicCommand>
 {
     public async Task Handle(AssignMechanicCommand request, CancellationToken cancellationToken)
     {
@@ -17,7 +17,13 @@ public class AssignMechanicCommandHandler(IAppDbContext db) : IRequestHandler<As
 
         await CreateJobCommandHandler.EnsureMechanicAsync(db, request.MechanicId, cancellationToken);
 
+        var isReassignment = job.AssignedMechanicId != request.MechanicId;
         job.AssignedMechanicId = request.MechanicId;
         await db.SaveChangesAsync(cancellationToken);
+
+        if (isReassignment)
+        {
+            await notifier.NotifyAsync(request.MechanicId, "JobAssigned", $"Job assigned to you: {job.Title}", cancellationToken);
+        }
     }
 }
