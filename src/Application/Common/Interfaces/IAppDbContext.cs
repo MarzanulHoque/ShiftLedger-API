@@ -12,6 +12,10 @@ public interface IAppDbContext
     DbSet<ShiftLedger.Domain.Entities.OrgSettings> OrgSettings { get; }
     DbSet<User> Users { get; }
     DbSet<Department> Departments { get; }
+    DbSet<ServiceJob> ServiceJobs { get; }
+    DbSet<JobComment> JobComments { get; }
+    DbSet<Bill> Bills { get; }
+    DbSet<BillLineItem> BillLineItems { get; }
     DbSet<EmployeeProfile> EmployeeProfiles { get; }
     DbSet<PayRate> PayRates { get; }
     DbSet<RefreshToken> RefreshTokens { get; }

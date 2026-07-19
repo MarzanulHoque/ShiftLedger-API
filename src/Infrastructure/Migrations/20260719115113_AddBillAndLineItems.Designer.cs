@@ -12,8 +12,8 @@ using ShiftLedger.Infrastructure.Persistence;
 namespace ShiftLedger.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260718094008_AddEmployeeProfileAndPayRate")]
-    partial class AddEmployeeProfileAndPayRate
+    [Migration("20260719115113_AddBillAndLineItems")]
+    partial class AddBillAndLineItems
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -63,6 +63,79 @@ namespace ShiftLedger.Infrastructure.Migrations
                     b.HasIndex("EntityName", "EntityId");
 
                     b.ToTable("AuditLogs");
+                });
+
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.Bill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsPaid");
+
+                    b.HasIndex("ServiceJobId")
+                        .IsUnique();
+
+                    b.ToTable("Bills");
+                });
+
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.BillLineItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("BillId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BillId");
+
+                    b.ToTable("BillLineItems");
                 });
 
             modelBuilder.Entity("ShiftLedger.Domain.Entities.Department", b =>
@@ -117,6 +190,39 @@ namespace ShiftLedger.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("EmployeeProfiles");
+                });
+
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.JobComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorId");
+
+                    b.HasIndex("ServiceJobId");
+
+                    b.ToTable("JobComments");
                 });
 
             modelBuilder.Entity("ShiftLedger.Domain.Entities.OrgSettings", b =>
@@ -254,6 +360,66 @@ namespace ShiftLedger.Infrastructure.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.ServiceJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("AssignedMechanicId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("BikeModel")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateOnly>("ReceivedDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedMechanicId");
+
+                    b.HasIndex("ReceivedDate");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ServiceJobs");
+                });
+
             modelBuilder.Entity("ShiftLedger.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -312,11 +478,44 @@ namespace ShiftLedger.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.Bill", b =>
+                {
+                    b.HasOne("ShiftLedger.Domain.Entities.ServiceJob", null)
+                        .WithOne()
+                        .HasForeignKey("ShiftLedger.Domain.Entities.Bill", "ServiceJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.BillLineItem", b =>
+                {
+                    b.HasOne("ShiftLedger.Domain.Entities.Bill", null)
+                        .WithMany()
+                        .HasForeignKey("BillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShiftLedger.Domain.Entities.EmployeeProfile", b =>
                 {
                     b.HasOne("ShiftLedger.Domain.Entities.User", null)
                         .WithOne()
                         .HasForeignKey("ShiftLedger.Domain.Entities.EmployeeProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.JobComment", b =>
+                {
+                    b.HasOne("ShiftLedger.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShiftLedger.Domain.Entities.ServiceJob", null)
+                        .WithMany()
+                        .HasForeignKey("ServiceJobId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -328,6 +527,14 @@ namespace ShiftLedger.Infrastructure.Migrations
                         .HasForeignKey("EmployeeProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ShiftLedger.Domain.Entities.ServiceJob", b =>
+                {
+                    b.HasOne("ShiftLedger.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedMechanicId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("ShiftLedger.Domain.Entities.User", b =>

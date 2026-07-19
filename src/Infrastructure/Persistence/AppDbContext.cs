@@ -9,13 +9,19 @@ using ShiftLedger.Domain.Entities;
 
 namespace ShiftLedger.Infrastructure.Persistence;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider timeProvider)
+// currentUser is optional so the design-time / test constructions (new AppDbContext(options, clock))
+// still work; when the DI container supplies it, audit rows are stamped with the acting user (A1).
+public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider timeProvider, ICurrentUser? currentUser = null)
     : DbContext(options), IAppDbContext
 {
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<OrgSettings> OrgSettings => Set<OrgSettings>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Department> Departments => Set<Department>();
+    public DbSet<ServiceJob> ServiceJobs => Set<ServiceJob>();
+    public DbSet<JobComment> JobComments => Set<JobComment>();
+    public DbSet<Bill> Bills => Set<Bill>();
+    public DbSet<BillLineItem> BillLineItems => Set<BillLineItem>();
     public DbSet<EmployeeProfile> EmployeeProfiles => Set<EmployeeProfile>();
     public DbSet<PayRate> PayRates => Set<PayRate>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -92,7 +98,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
                 EntityName = entry.Metadata.ClrType.Name,
                 EntityId = entry.Entity.Id.ToString(),
                 Action = action,
-                ChangedById = null, // populated from the current user once auth exists (P2+)
+                ChangedById = currentUser?.UserId, // the acting user, from the JWT (Rule A1)
                 ChangedAtUtc = now,
                 OldValuesJson = oldValues is null ? null : JsonSerializer.Serialize(oldValues),
                 NewValuesJson = newValues is null ? null : JsonSerializer.Serialize(newValues),

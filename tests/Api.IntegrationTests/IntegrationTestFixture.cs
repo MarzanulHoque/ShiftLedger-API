@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ShiftLedger.Application.Common.Interfaces;
 using ShiftLedger.Infrastructure.Persistence;
 using Xunit;
 
@@ -25,6 +26,9 @@ public class IntegrationTestFixture : IAsyncLifetime
     }
 
     public AppDbContext CreateContext() => new(_options, TimeProvider.System);
+
+    // Overload for tests that need audit rows stamped with an acting user (Rule A1) or a specific caller.
+    public AppDbContext CreateContext(ICurrentUser currentUser) => new(_options, TimeProvider.System, currentUser);
 
     public async Task InitializeAsync()
     {

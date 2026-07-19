@@ -29,6 +29,10 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// The acting user (from the JWT) for ownership scoping (R2) and audit "who" (A1).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.ICurrentUser, ShiftLedger.Api.Security.CurrentUser>();
+
 // CORS for the Angular dev server (SPA on :4200 calling the API on :5184). In staging/production
 // the SPA is served same-origin behind a reverse proxy (docs/10), so this policy is dev-only.
 const string SpaCorsPolicy = "SpaDev";

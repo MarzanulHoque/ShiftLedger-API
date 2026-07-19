@@ -1,0 +1,168 @@
+using FluentAssertions;
+using ShiftLedger.Application.Common.Exceptions;
+using ShiftLedger.Application.Jobs;
+using ShiftLedger.Application.Users;
+using ShiftLedger.Domain.Enums;
+using ShiftLedger.Infrastructure.Persistence;
+using ShiftLedger.Infrastructure.Security;
+using Xunit;
+
+namespace ShiftLedger.Api.IntegrationTests.Jobs;
+
+[Collection("Database")]
+public class ServiceJobTests(IntegrationTestFixture fixture)
+{
+    private static async Task<Guid> CreateUserAsync(AppDbContext ctx, string email, Role role) =>
+        await new CreateUserCommandHandler(ctx, new PasswordHasher())
+            .Handle(new CreateUserCommand("Test User", email, "Secret#123", role, null), default);
+
+    private static CreateJobCommand NewJob(Guid? mechanicId = null) =>
+        new("Brake service", "Squeaky front brake", "Trek FX 2", JobPriority.Medium, mechanicId, null, null);
+
+    // Rule A1: creating a job writes a 'Created' audit row stamped with the acting user.
+    [Fact]
+    public async Task CreateJob_WritesAuditRow_StampedWithActingUser_A1()
+    {
+        Guid adminId;
+        await using (var setup = fixture.CreateContext())
+        {
+            adminId = await CreateUserAsync(setup, "p4-admin-audit@test.local", Role.Admin);
+        }
+
+        Guid jobId;
+        await using (var ctx = fixture.CreateContext(TestCurrentUser.Admin(adminId)))
+        {
+            jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System).Handle(NewJob(), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var history = await new GetJobHistoryQueryHandler(verify).Handle(new GetJobHistoryQuery(jobId), default);
+        history.Should().ContainSingle(h => h.Action == "Created")
+            .Which.ChangedById.Should().Be(adminId);
+    }
+
+    // Rule J1: advancing one step is allowed; an illegal jump is rejected (422 via BusinessRuleException).
+    [Fact]
+    public async Task ChangeStatus_EnforcesFlow_J1()
+    {
+        Guid adminId, jobId;
+        await using (var setup = fixture.CreateContext())
+        {
+            adminId = await CreateUserAsync(setup, "p4-admin-flow@test.local", Role.Admin);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+        }
+
+        var admin = TestCurrentUser.Admin(adminId);
+
+        await using (var ctx = fixture.CreateContext(admin))
+        {
+            var jump = () => new ChangeJobStatusCommandHandler(ctx, admin)
+                .Handle(new ChangeJobStatusCommand(jobId, JobStatus.Delivered), default);
+            await jump.Should().ThrowAsync<BusinessRuleException>();
+        }
+
+        await using (var ctx = fixture.CreateContext(admin))
+        {
+            await new ChangeJobStatusCommandHandler(ctx, admin)
+                .Handle(new ChangeJobStatusCommand(jobId, JobStatus.InProgress), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var job = await new GetJobQueryHandler(verify, admin).Handle(new GetJobQuery(jobId), default);
+        job.Status.Should().Be(JobStatus.InProgress);
+    }
+
+    // Rule J2: only an Employee-role user can be assigned; assigning an Admin is rejected.
+    [Fact]
+    public async Task AssignMechanic_RejectsNonEmployee_J2()
+    {
+        Guid adminId, mechanicId, jobId;
+        await using (var setup = fixture.CreateContext())
+        {
+            adminId = await CreateUserAsync(setup, "p4-admin-assign@test.local", Role.Admin);
+            mechanicId = await CreateUserAsync(setup, "p4-mech-assign@test.local", Role.Employee);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+        }
+
+        await using (var ctx = fixture.CreateContext())
+        {
+            var assignAdmin = () => new AssignMechanicCommandHandler(ctx)
+                .Handle(new AssignMechanicCommand(jobId, adminId), default);
+            await assignAdmin.Should().ThrowAsync<BusinessRuleException>();
+        }
+
+        await using (var ctx = fixture.CreateContext())
+        {
+            await new AssignMechanicCommandHandler(ctx).Handle(new AssignMechanicCommand(jobId, mechanicId), default);
+        }
+    }
+
+    // Rule R2/R3: a mechanic sees only their own jobs, and cannot open another mechanic's job.
+    [Fact]
+    public async Task Mechanic_SeesOnlyOwnJobs_R2R3()
+    {
+        Guid mech1, mech2, jobForMech1;
+        await using (var setup = fixture.CreateContext())
+        {
+            mech1 = await CreateUserAsync(setup, "p4-mech1@test.local", Role.Employee);
+            mech2 = await CreateUserAsync(setup, "p4-mech2@test.local", Role.Employee);
+            jobForMech1 = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(mech1), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+
+        var mech1Jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Employee(mech1))
+            .Handle(new GetJobsQuery(null, null), default);
+        mech1Jobs.Should().Contain(j => j.Id == jobForMech1);
+
+        var mech2Jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Employee(mech2))
+            .Handle(new GetJobsQuery(null, null), default);
+        mech2Jobs.Should().NotContain(j => j.Id == jobForMech1);
+
+        var openOthers = () => new GetJobQueryHandler(verify, TestCurrentUser.Employee(mech2))
+            .Handle(new GetJobQuery(jobForMech1), default);
+        await openOthers.Should().ThrowAsync<ForbiddenException>();
+    }
+
+    // Rule J4: a deleted job is soft-deleted and excluded from listings.
+    [Fact]
+    public async Task DeleteJob_SoftDeletes_ExcludedFromList_J4()
+    {
+        Guid adminId, jobId;
+        await using (var setup = fixture.CreateContext())
+        {
+            adminId = await CreateUserAsync(setup, "p4-admin-del@test.local", Role.Admin);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+            await new DeleteJobCommandHandler(setup).Handle(new DeleteJobCommand(jobId), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Admin(adminId))
+            .Handle(new GetJobsQuery(null, null), default);
+        jobs.Should().NotContain(j => j.Id == jobId);
+    }
+
+    // Comments: add then read back, scoped to a user who can see the job.
+    [Fact]
+    public async Task AddComment_ThenList_ReturnsComment()
+    {
+        Guid adminId, jobId;
+        await using (var setup = fixture.CreateContext())
+        {
+            adminId = await CreateUserAsync(setup, "p4-admin-comment@test.local", Role.Admin);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System).Handle(NewJob(), default);
+        }
+
+        var admin = TestCurrentUser.Admin(adminId);
+        await using (var ctx = fixture.CreateContext(admin))
+        {
+            await new AddJobCommentCommandHandler(ctx, admin, TimeProvider.System)
+                .Handle(new AddJobCommentCommand(jobId, "Waiting on a brake pad."), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var comments = await new GetJobCommentsQueryHandler(verify, admin)
+            .Handle(new GetJobCommentsQuery(jobId), default);
+        comments.Should().ContainSingle(c => c.Body == "Waiting on a brake pad." && c.AuthorId == adminId);
+    }
+}
