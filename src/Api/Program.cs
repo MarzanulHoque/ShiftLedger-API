@@ -121,7 +121,10 @@ else
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<ShiftLedger.Api.Realtime.NotificationsHub>("/hubs/notifications");
+// Notifications hub unplugged for now, per request — client no longer connects either.
+// INotifier/IRealtimePusher stay registered (handlers depend on them via DI); this just
+// means the route doesn't exist, so any push has zero connected clients to reach.
+// Uncomment to re-enable live notifications: app.MapHub<ShiftLedger.Api.Realtime.NotificationsHub>("/hubs/notifications");
 
 // In Development also seed demo accounts (admin + two employees) for the quick-login buttons.
 await DbSeeder.SeedAsync(app.Services, seedDemoData: app.Environment.IsDevelopment());
