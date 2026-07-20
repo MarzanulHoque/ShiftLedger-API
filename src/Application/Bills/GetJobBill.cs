@@ -11,7 +11,7 @@ public record BillLineItemDto(
 
 // Total and line totals are computed on read (Rule B2), never persisted.
 public record BillDto(
-    Guid Id, Guid ServiceJobId, bool IsPaid, DateTime? PaidAtUtc,
+    Guid Id, int BillNumber, Guid ServiceJobId, bool IsPaid, DateTime? PaidAtUtc,
     IReadOnlyList<BillLineItemDto> Lines, decimal Total);
 
 public record GetJobBillQuery(Guid ServiceJobId) : IRequest<BillDto>;
@@ -34,6 +34,6 @@ public class GetJobBillQueryHandler(IAppDbContext db) : IRequestHandler<GetJobBi
                 l.Id, l.Type, l.Description, l.Quantity, l.UnitPrice, BillMath.LineTotal(l.Quantity, l.UnitPrice)))
             .ToList();
 
-        return new BillDto(bill.Id, bill.ServiceJobId, bill.IsPaid, bill.PaidAtUtc, lineDtos, BillMath.Total(lines));
+        return new BillDto(bill.Id, bill.BillNumber, bill.ServiceJobId, bill.IsPaid, bill.PaidAtUtc, lineDtos, BillMath.Total(lines));
     }
 }

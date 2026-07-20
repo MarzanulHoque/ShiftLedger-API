@@ -21,7 +21,7 @@ public class GetJobQueryHandler(IAppDbContext db, ICurrentUser currentUser) : IR
         }
 
         return new JobDto(
-            job.Id, job.Title, job.Description, job.BikeModel, job.Status, job.Priority,
+            job.Id, job.JobNumber, job.Title, job.Description, job.BikeModel, job.Status, job.Priority,
             job.AssignedMechanicId, job.ReceivedDate, job.DueDate);
     }
 }

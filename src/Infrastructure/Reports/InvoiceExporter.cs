@@ -43,7 +43,11 @@ public class InvoiceExporter : IInvoiceExporter
                     row.ConstantItem(180).Column(col =>
                     {
                         col.Item().AlignRight().Text("INVOICE").FontSize(16).Bold();
-                        col.Item().AlignRight().Text($"#{invoice.BillId.ToString()[..8].ToUpperInvariant()}").FontColor(Muted);
+                        col.Item().AlignRight().Text($"INV-{invoice.BillNumber:D6}").FontColor(Muted);
+                        if (invoice.JobNumber is { } jobNumber)
+                        {
+                            col.Item().AlignRight().Text($"Job JOB-{jobNumber:D6}").FontSize(8).FontColor(Muted);
+                        }
                         col.Item().AlignRight().Text(
                             invoice.IsPaid && invoice.PaidAtUtc is { } paidAt
                                 ? $"Paid {paidAt:yyyy-MM-dd}"
@@ -62,6 +66,10 @@ public class InvoiceExporter : IInvoiceExporter
                             c.Item().Text("Service").FontSize(9).Bold().FontColor(Muted);
                             c.Item().Text(invoice.JobTitle).FontSize(13).Bold();
                             c.Item().Text(invoice.BikeModel).FontColor(Muted);
+                            if (invoice.JobNumber is { } jobNumber)
+                            {
+                                c.Item().Text($"JOB-{jobNumber:D6}").FontSize(9).FontColor(Muted);
+                            }
                         });
                         row.RelativeItem().Column(c =>
                         {

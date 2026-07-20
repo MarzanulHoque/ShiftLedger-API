@@ -7,6 +7,9 @@ namespace ShiftLedger.Domain.Entities;
 // while unpaid; once IsPaid the bill and its lines are locked (Rule B3).
 public class Bill : BaseEntity, ISoftDeletable
 {
+    // Human-readable invoice number (e.g. "INV-000045"), DB-assigned via MySQL AUTO_INCREMENT —
+    // replaces the truncated-GUID trick the invoice PDF used to show.
+    public int BillNumber { get; set; }
     public Guid ServiceJobId { get; set; }
     public bool IsPaid { get; set; }
     public DateTime? PaidAtUtc { get; set; }

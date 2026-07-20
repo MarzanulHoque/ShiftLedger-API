@@ -8,6 +8,9 @@ public class ServiceJobConfiguration : IEntityTypeConfiguration<ServiceJob>
 {
     public void Configure(EntityTypeBuilder<ServiceJob> builder)
     {
+        builder.Property(j => j.JobNumber).ValueGeneratedOnAdd();
+        builder.HasIndex(j => j.JobNumber).IsUnique();
+
         builder.Property(j => j.Title).HasMaxLength(200);
         builder.Property(j => j.Description).HasMaxLength(2000);
         builder.Property(j => j.BikeModel).HasMaxLength(128);

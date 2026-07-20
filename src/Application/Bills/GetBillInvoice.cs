@@ -10,6 +10,8 @@ public record InvoiceLineDto(LineItemType Type, string Description, decimal Quan
 
 public record InvoiceDto(
     Guid BillId,
+    int BillNumber,
+    int? JobNumber,
     string JobTitle,
     string BikeModel,
     string? MechanicName,
@@ -59,6 +61,8 @@ public class GetBillInvoiceQueryHandler(IAppDbContext db) : IRequestHandler<GetB
 
         return new InvoiceDto(
             bill.Id,
+            bill.BillNumber,
+            job?.JobNumber,
             job?.Title ?? "(deleted job)",
             job?.BikeModel ?? "—",
             mechanicName,
