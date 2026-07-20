@@ -12,8 +12,8 @@ public static class DbSeeder
     // A fixed demo account (Development only) backing a quick-login button in the client.
     public sealed record DemoAccount(string FullName, string Email, string Password, Role Role);
 
-    // Passwords are dev/demo only and intentionally known (see ShiftLedger-Client/CREDENTIALS.md);
-    // they must be rotated before any non-dev environment.
+    // Passwords are dev/demo only and intentionally known; they must be rotated before any
+    // non-dev environment. Quote them directly when logging in to the local dev API.
     public static readonly DemoAccount DemoAdmin = new("Administrator", "admin@shiftledger.local", "Admin#12345", Role.Admin);
     public static readonly DemoAccount DemoEmployee = new("Sam Carter", "sam@shiftledger.local", "Employee#123", Role.Employee);
     public static readonly DemoAccount DemoEmployee2 = new("Jordan Lee", "jordan@shiftledger.local", "Employee#123", Role.Employee);
