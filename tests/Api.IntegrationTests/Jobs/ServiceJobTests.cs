@@ -112,12 +112,12 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using var verify = fixture.CreateContext();
 
         var mech1Jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Employee(mech1))
-            .Handle(new GetJobsQuery(null, null), default);
-        mech1Jobs.Should().Contain(j => j.Id == jobForMech1);
+            .Handle(new GetJobsQuery(null, null, 1, 100), default);
+        mech1Jobs.Items.Should().Contain(j => j.Id == jobForMech1);
 
         var mech2Jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Employee(mech2))
-            .Handle(new GetJobsQuery(null, null), default);
-        mech2Jobs.Should().NotContain(j => j.Id == jobForMech1);
+            .Handle(new GetJobsQuery(null, null, 1, 100), default);
+        mech2Jobs.Items.Should().NotContain(j => j.Id == jobForMech1);
 
         var openOthers = () => new GetJobQueryHandler(verify, TestCurrentUser.Employee(mech2))
             .Handle(new GetJobQuery(jobForMech1), default);
@@ -138,8 +138,33 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
 
         await using var verify = fixture.CreateContext();
         var jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Admin(adminId))
-            .Handle(new GetJobsQuery(null, null), default);
-        jobs.Should().NotContain(j => j.Id == jobId);
+            .Handle(new GetJobsQuery(null, null, 1, 100), default);
+        jobs.Items.Should().NotContain(j => j.Id == jobId);
+    }
+
+    // NFR: list endpoints are paginated — pages don't overlap and totalCount spans the whole set.
+    [Fact]
+    public async Task GetJobs_Paginated_NoOverlap()
+    {
+        Guid adminId;
+        await using (var setup = fixture.CreateContext())
+        {
+            adminId = await CreateUserAsync(setup, "p7-admin-paging@test.local", Role.Admin);
+            var jobs = new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup));
+            for (var i = 0; i < 3; i++)
+            {
+                await jobs.Handle(NewJob() with { Title = $"Paging job {i}" }, default);
+            }
+        }
+
+        await using var verify = fixture.CreateContext();
+        var admin = TestCurrentUser.Admin(adminId);
+        var page1 = await new GetJobsQueryHandler(verify, admin).Handle(new GetJobsQuery(null, null, 1, 2), default);
+        var page2 = await new GetJobsQueryHandler(verify, admin).Handle(new GetJobsQuery(null, null, 2, 2), default);
+
+        page1.Items.Should().HaveCount(2);
+        page1.TotalCount.Should().BeGreaterThanOrEqualTo(3).And.Be(page2.TotalCount);
+        page2.Items.Select(j => j.Id).Should().NotIntersectWith(page1.Items.Select(j => j.Id));
     }
 
     // Comments: add then read back, scoped to a user who can see the job.

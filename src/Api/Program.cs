@@ -111,6 +111,7 @@ if (app.Environment.IsDevelopment())
 else
 {
     // Only force HTTPS outside Development; the SPA dev server talks plain HTTP to :5184.
+    app.UseHsts();
     app.UseHttpsRedirection();
 }
 

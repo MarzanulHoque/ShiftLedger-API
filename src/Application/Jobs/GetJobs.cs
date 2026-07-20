@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ShiftLedger.Application.Common.Interfaces;
+using ShiftLedger.Application.Common.Models;
 using ShiftLedger.Domain.Enums;
 
 namespace ShiftLedger.Application.Jobs;
@@ -9,12 +10,13 @@ public record JobDto(
     Guid Id, string Title, string? Description, string BikeModel, JobStatus Status, JobPriority Priority,
     Guid? AssignedMechanicId, DateOnly ReceivedDate, DateOnly? DueDate);
 
-public record GetJobsQuery(JobStatus? Status, Guid? MechanicId) : IRequest<IReadOnlyList<JobDto>>;
+public record GetJobsQuery(JobStatus? Status, Guid? MechanicId, int? Page = null, int? PageSize = null)
+    : IRequest<PagedResult<JobDto>>;
 
 public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
-    : IRequestHandler<GetJobsQuery, IReadOnlyList<JobDto>>
+    : IRequestHandler<GetJobsQuery, PagedResult<JobDto>>
 {
-    public async Task<IReadOnlyList<JobDto>> Handle(GetJobsQuery request, CancellationToken cancellationToken)
+    public async Task<PagedResult<JobDto>> Handle(GetJobsQuery request, CancellationToken cancellationToken)
     {
         // Soft-deleted jobs are excluded by the global query filter.
         var query = db.ServiceJobs.AsNoTracking();
@@ -40,6 +42,6 @@ public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
             .Select(j => new JobDto(
                 j.Id, j.Title, j.Description, j.BikeModel, j.Status, j.Priority,
                 j.AssignedMechanicId, j.ReceivedDate, j.DueDate))
-            .ToListAsync(cancellationToken);
+            .ToPagedResultAsync(request.Page, request.PageSize, cancellationToken);
     }
 }

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ShiftLedger.Application.Bills;
+using ShiftLedger.Application.Common.Models;
 using ShiftLedger.Domain.Enums;
 
 namespace ShiftLedger.Api.Controllers;
@@ -14,8 +15,9 @@ namespace ShiftLedger.Api.Controllers;
 public class BillsController(ISender mediator) : ControllerBase
 {
     [HttpGet("bills")]
-    public async Task<ActionResult<IReadOnlyList<BillSummaryDto>>> Get([FromQuery] bool? isPaid)
-        => Ok(await mediator.Send(new GetBillsQuery(isPaid)));
+    public async Task<ActionResult<PagedResult<BillSummaryDto>>> Get(
+        [FromQuery] bool? isPaid, [FromQuery] int? page, [FromQuery] int? pageSize)
+        => Ok(await mediator.Send(new GetBillsQuery(isPaid, page, pageSize)));
 
     [HttpGet("jobs/{jobId:guid}/bill")]
     public async Task<ActionResult<BillDto>> GetForJob(Guid jobId)

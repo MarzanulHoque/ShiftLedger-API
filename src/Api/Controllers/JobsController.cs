@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ShiftLedger.Application.Common.Models;
 using ShiftLedger.Application.Jobs;
 using ShiftLedger.Domain.Enums;
 
@@ -13,8 +14,10 @@ namespace ShiftLedger.Api.Controllers;
 public class JobsController(ISender mediator) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<JobDto>>> Get([FromQuery] JobStatus? status, [FromQuery] Guid? mechanicId)
-        => Ok(await mediator.Send(new GetJobsQuery(status, mechanicId)));
+    public async Task<ActionResult<PagedResult<JobDto>>> Get(
+        [FromQuery] JobStatus? status, [FromQuery] Guid? mechanicId,
+        [FromQuery] int? page, [FromQuery] int? pageSize)
+        => Ok(await mediator.Send(new GetJobsQuery(status, mechanicId, page, pageSize)));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<JobDto>> GetById(Guid id) => Ok(await mediator.Send(new GetJobQuery(id)));

@@ -40,11 +40,11 @@ public class NotificationTests(IntegrationTestFixture fixture)
 
         var mine = await new GetNotificationsQueryHandler(verify, TestCurrentUser.Employee(mechanicId))
             .Handle(new GetNotificationsQuery(), default);
-        mine.Should().Contain(n => n.Type == "JobAssigned" && !n.IsRead);
+        mine.Items.Should().Contain(n => n.Type == "JobAssigned" && !n.IsRead);
 
         var others = await new GetNotificationsQueryHandler(verify, TestCurrentUser.Employee(otherId))
             .Handle(new GetNotificationsQuery(), default);
-        others.Should().BeEmpty();
+        others.Items.Should().BeEmpty();
     }
 
     // Mark-read is owner-scoped: another user gets a 404, never access to the row.
@@ -77,6 +77,6 @@ public class NotificationTests(IntegrationTestFixture fixture)
         await using var verify = fixture.CreateContext();
         var unread = await new GetNotificationsQueryHandler(verify, TestCurrentUser.Employee(mechanicId))
             .Handle(new GetNotificationsQuery(UnreadOnly: true), default);
-        unread.Should().NotContain(n => n.Id == notificationId);
+        unread.Items.Should().NotContain(n => n.Id == notificationId);
     }
 }

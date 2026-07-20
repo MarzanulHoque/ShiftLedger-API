@@ -45,9 +45,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
 
     private void CaptureChanges()
     {
+        EnforceAuditLogAppendOnly();    // A2 — reject any update/delete of an audit row
         WriteAuditLogs();               // A1/A2 — capture the semantic Added/Modified/Deleted first
         ApplySoftDeletes();             // convert Deleted -> Modified for ISoftDeletable
         RegenerateConcurrencyTokens();  // C1 — bump token on all Modified (incl. just-soft-deleted)
+    }
+
+    // Rule A2: AuditLog is append-only — no code path may ever update or delete a row.
+    private void EnforceAuditLogAppendOnly()
+    {
+        foreach (var entry in ChangeTracker.Entries<AuditLog>())
+        {
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+            {
+                throw new InvalidOperationException("AuditLog is append-only (Rule A2) — rows are never updated or deleted.");
+            }
+        }
     }
 
     // Rule C1: bump the concurrency token on every modified entity so a stale update fails (409).
@@ -112,8 +125,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
         }
     }
 
-    // RowVersion is excluded from audit values — its churn is noise, not a business change.
-    private static bool IsAuditable(string propertyName) => propertyName != nameof(BaseEntity.RowVersion);
+    // Excluded from audit values: RowVersion (churn is noise, not a business change) and secret
+    // material — hashes never belong in audit JSON (docs/09: no secrets in logs).
+    private static readonly string[] NonAuditableProperties =
+        [nameof(BaseEntity.RowVersion), "PasswordHash", "TokenHash", "ReplacedByTokenHash"];
+
+    private static bool IsAuditable(string propertyName) => !NonAuditableProperties.Contains(propertyName);
 
     private static Dictionary<string, object?> CurrentValues(EntityEntry entry) =>
         entry.CurrentValues.Properties.Where(p => IsAuditable(p.Name))
