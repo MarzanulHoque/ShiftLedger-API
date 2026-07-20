@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ShiftLedger.Application.Bills;
+using ShiftLedger.Application.Common.Interfaces;
 using ShiftLedger.Application.Common.Models;
 using ShiftLedger.Domain.Enums;
 
@@ -12,7 +13,7 @@ namespace ShiftLedger.Api.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Authorize(Roles = "Admin")]
-public class BillsController(ISender mediator) : ControllerBase
+public class BillsController(ISender mediator, IInvoiceExporter invoiceExporter) : ControllerBase
 {
     [HttpGet("bills")]
     public async Task<ActionResult<PagedResult<BillSummaryDto>>> Get(
@@ -52,6 +53,13 @@ public class BillsController(ISender mediator) : ControllerBase
     {
         await mediator.Send(new SetBillPaidCommand(billId, request.IsPaid));
         return NoContent();
+    }
+
+    [HttpGet("bills/{billId:guid}/invoice")]
+    public async Task<IActionResult> GetInvoice(Guid billId)
+    {
+        var invoice = await mediator.Send(new GetBillInvoiceQuery(billId));
+        return File(invoiceExporter.ToPdf(invoice), "application/pdf", $"invoice-{billId.ToString()[..8]}.pdf");
     }
 }
 

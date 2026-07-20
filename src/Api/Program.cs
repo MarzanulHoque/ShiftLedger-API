@@ -41,6 +41,9 @@ builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.IRealtimePu
 // Report downloads (P6): PDF via QuestPDF, Excel via ClosedXML.
 builder.Services.AddSingleton<ShiftLedger.Application.Common.Interfaces.IReportExporter, ShiftLedger.Infrastructure.Reports.ReportExporter>();
 
+// Per-bill customer invoice (PDF via QuestPDF, same renderer family as reports).
+builder.Services.AddSingleton<ShiftLedger.Application.Common.Interfaces.IInvoiceExporter, ShiftLedger.Infrastructure.Reports.InvoiceExporter>();
+
 // CORS for the React/Vite dev server (SPA on :5173 calling the API on :5184). In staging/production
 // the SPA is served same-origin behind a reverse proxy (docs/10), so this policy is dev-only.
 // AllowCredentials is required for the SignalR negotiate handshake.
