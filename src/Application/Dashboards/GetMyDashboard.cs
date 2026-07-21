@@ -32,7 +32,7 @@ public class GetMyDashboardQueryHandler(IAppDbContext db, ICurrentUser currentUs
             .ThenBy(j => j.DueDate)
             .ThenByDescending(j => j.ReceivedDate)
             .Select(j => new JobDto(
-                j.Id, j.JobNumber, j.Title, j.Description, j.BikeModel, j.Status, j.Priority,
+                j.Id, j.JobNumber, j.DepartmentId, j.Title, j.Description, j.BikeModel, j.Status, j.Priority,
                 j.AssignedMechanicId, j.ReceivedDate, j.DueDate))
             .ToListAsync(cancellationToken);
 

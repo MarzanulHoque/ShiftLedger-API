@@ -7,8 +7,8 @@ using ShiftLedger.Domain.Enums;
 namespace ShiftLedger.Application.Jobs;
 
 public record JobDto(
-    Guid Id, int JobNumber, string Title, string? Description, string BikeModel, JobStatus Status, JobPriority Priority,
-    Guid? AssignedMechanicId, DateOnly ReceivedDate, DateOnly? DueDate);
+    Guid Id, int JobNumber, Guid DepartmentId, string Title, string? Description, string BikeModel, JobStatus Status,
+    JobPriority Priority, Guid? AssignedMechanicId, DateOnly ReceivedDate, DateOnly? DueDate);
 
 public record GetJobsQuery(JobStatus? Status, Guid? MechanicId, int? Page = null, int? PageSize = null)
     : IRequest<PagedResult<JobDto>>;
@@ -40,7 +40,7 @@ public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
             .OrderByDescending(j => j.ReceivedDate)
             .ThenBy(j => j.Title)
             .Select(j => new JobDto(
-                j.Id, j.JobNumber, j.Title, j.Description, j.BikeModel, j.Status, j.Priority,
+                j.Id, j.JobNumber, j.DepartmentId, j.Title, j.Description, j.BikeModel, j.Status, j.Priority,
                 j.AssignedMechanicId, j.ReceivedDate, j.DueDate))
             .ToPagedResultAsync(request.Page, request.PageSize, cancellationToken);
     }

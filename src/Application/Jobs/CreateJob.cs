@@ -8,7 +8,9 @@ using ShiftLedger.Domain.Enums;
 
 namespace ShiftLedger.Application.Jobs;
 
-// Intake of a new service job (Admin action). BikeModel is free text in v1 (no Customer/Bike entity).
+// Intake of a new service job (Admin-tier action). BikeModel is free text in v1 (no Customer/Bike
+// entity). DepartmentId is required (Rule RB3) - which department may create/assign it into is
+// enforced by the handler in P9, not here.
 public record CreateJobCommand(
     string Title,
     string? Description,
@@ -16,7 +18,8 @@ public record CreateJobCommand(
     JobPriority? Priority,
     Guid? AssignedMechanicId,
     DateOnly? ReceivedDate,
-    DateOnly? DueDate) : IRequest<Guid>;
+    DateOnly? DueDate,
+    Guid DepartmentId) : IRequest<Guid>;
 
 public class CreateJobCommandValidator : AbstractValidator<CreateJobCommand>
 {
@@ -25,6 +28,7 @@ public class CreateJobCommandValidator : AbstractValidator<CreateJobCommand>
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.BikeModel).NotEmpty().MaximumLength(128);
         RuleFor(x => x.Description).MaximumLength(2000);
+        RuleFor(x => x.DepartmentId).NotEmpty();
     }
 }
 
@@ -40,6 +44,7 @@ public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider
 
         var job = new ServiceJob
         {
+            DepartmentId = request.DepartmentId,
             Title = request.Title.Trim(),
             Description = request.Description?.Trim(),
             BikeModel = request.BikeModel.Trim(),
