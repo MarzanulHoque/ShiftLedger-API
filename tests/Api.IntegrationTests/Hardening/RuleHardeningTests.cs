@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using ShiftLedger.Domain.Entities;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 using Xunit;
 
 namespace ShiftLedger.Api.IntegrationTests.Hardening;
@@ -16,7 +17,13 @@ public class RuleHardeningTests(IntegrationTestFixture fixture)
         Guid jobId;
         await using (var setup = fixture.CreateContext())
         {
-            var job = new ServiceJob { Title = "C4 job", BikeModel = "Test bike", ReceivedDate = new DateOnly(2026, 7, 19) };
+            var job = new ServiceJob
+            {
+                DepartmentId = DepartmentConfiguration.MechanicsId,
+                Title = "C4 job",
+                BikeModel = "Test bike",
+                ReceivedDate = new DateOnly(2026, 7, 19),
+            };
             setup.ServiceJobs.Add(job);
             await setup.SaveChangesAsync();
             jobId = job.Id;

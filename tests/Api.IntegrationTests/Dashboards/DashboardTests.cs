@@ -5,6 +5,7 @@ using ShiftLedger.Application.Jobs;
 using ShiftLedger.Application.Users;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 using ShiftLedger.Infrastructure.Security;
 using Xunit;
 
@@ -28,7 +29,8 @@ public class DashboardTests(IntegrationTestFixture fixture)
         await using (var ctx = fixture.CreateContext())
         {
             var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
-                .Handle(new CreateJobCommand("Dashboard job", null, "Cannondale Trail", null, null, null, null), default);
+                .Handle(new CreateJobCommand("Dashboard job", null, "Cannondale Trail", null, null, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
             var billId = await new CreateBillCommandHandler(ctx).Handle(new CreateBillCommand(jobId), default);
             await new AddLineItemCommandHandler(ctx)
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Dashboard labor", 1m, 777m), default);
@@ -60,9 +62,11 @@ public class DashboardTests(IntegrationTestFixture fixture)
 
             var jobs = new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup));
             myJobId = await jobs.Handle(
-                new CreateJobCommand("My dash job", null, "Merida Big Nine", null, mechanicId, null, null), default);
+                new CreateJobCommand("My dash job", null, "Merida Big Nine", null, mechanicId, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
             await jobs.Handle(
-                new CreateJobCommand("Other dash job", null, "Scott Aspect", null, otherMechanicId, null, null), default);
+                new CreateJobCommand("Other dash job", null, "Scott Aspect", null, otherMechanicId, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
         }
 
         await using var verify = fixture.CreateContext();

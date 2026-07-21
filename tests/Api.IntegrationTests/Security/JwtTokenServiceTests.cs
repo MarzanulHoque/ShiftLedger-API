@@ -23,14 +23,14 @@ public class JwtTokenServiceTests
             AccessTokenMinutes = 15,
         });
         var service = new JwtTokenService(options, TimeProvider.System);
-        var user = new User { Email = "a@b.com", Role = Role.Admin };
+        var user = new User { Email = "a@b.com", Role = Role.SuperAdmin };
 
         var (token, expiresAtUtc) = service.CreateAccessToken(user);
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
         jwt.Issuer.Should().Be("iss");
         jwt.Claims.Should().Contain(c => c.Value == "a@b.com");
-        jwt.Claims.Should().Contain(c => c.Value == "Admin");
+        jwt.Claims.Should().Contain(c => c.Value == "SuperAdmin");
         expiresAtUtc.Should().BeAfter(DateTime.UtcNow);
     }
 }

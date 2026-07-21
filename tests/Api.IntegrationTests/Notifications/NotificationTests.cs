@@ -5,6 +5,7 @@ using ShiftLedger.Application.Notifications;
 using ShiftLedger.Application.Users;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 using ShiftLedger.Infrastructure.Security;
 using Xunit;
 
@@ -27,7 +28,8 @@ public class NotificationTests(IntegrationTestFixture fixture)
             mechanicId = await CreateUserAsync(setup, "p6-mech@test.local", Role.Employee);
             otherId = await CreateUserAsync(setup, "p6-other@test.local", Role.Employee);
             jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup))
-                .Handle(new CreateJobCommand("Fork service", null, "Specialized Rockhopper", null, null, null, null), default);
+                .Handle(new CreateJobCommand("Fork service", null, "Specialized Rockhopper", null, null, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
         }
 
         await using (var ctx = fixture.CreateContext())

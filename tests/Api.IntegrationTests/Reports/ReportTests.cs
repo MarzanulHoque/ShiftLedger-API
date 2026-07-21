@@ -4,6 +4,7 @@ using ShiftLedger.Application.Jobs;
 using ShiftLedger.Application.Reports;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 using Xunit;
 
 namespace ShiftLedger.Api.IntegrationTests.Reports;
@@ -15,7 +16,8 @@ public class ReportTests(IntegrationTestFixture fixture)
     {
         await using var ctx = fixture.CreateContext();
         var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
-            .Handle(new CreateJobCommand(title, null, "Test bike", null, null, null, null), default);
+            .Handle(new CreateJobCommand(title, null, "Test bike", null, null, null, null,
+                DepartmentConfiguration.MechanicsId), default);
         var billId = await new CreateBillCommandHandler(ctx).Handle(new CreateBillCommand(jobId), default);
         await new AddLineItemCommandHandler(ctx)
             .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Service", 1m, amount), default);

@@ -4,6 +4,7 @@ using ShiftLedger.Application.Common.Exceptions;
 using ShiftLedger.Application.Jobs;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 using Xunit;
 
 namespace ShiftLedger.Api.IntegrationTests.Bills;
@@ -13,7 +14,8 @@ public class BillingTests(IntegrationTestFixture fixture)
 {
     private static async Task<Guid> CreateJobAsync(AppDbContext ctx) =>
         await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx)).Handle(
-            new CreateJobCommand("Tune-up", null, "Giant Escape 3", JobPriority.Medium, null, null, null), default);
+            new CreateJobCommand("Tune-up", null, "Giant Escape 3", JobPriority.Medium, null, null, null,
+                DepartmentConfiguration.MechanicsId), default);
 
     private async Task<(Guid JobId, Guid BillId)> CreateJobWithBillAsync()
     {
