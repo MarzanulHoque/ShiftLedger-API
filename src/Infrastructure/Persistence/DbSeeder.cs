@@ -4,20 +4,37 @@ using Microsoft.Extensions.DependencyInjection;
 using ShiftLedger.Application.Common.Interfaces;
 using ShiftLedger.Domain.Entities;
 using ShiftLedger.Domain.Enums;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 
 namespace ShiftLedger.Infrastructure.Persistence;
 
+// v2 restructure: seeds the two phase-1 departments' full staff tree (SuperAdmin + a
+// DepartmentAdmin and two Employees per department) instead of a single flat Admin/Employee set.
+// Departments themselves are migration-seeded (fixed IDs — DepartmentConfiguration.HasData), not
+// created here, so they exist even when seedDemoData is off.
 public static class DbSeeder
 {
     // A fixed demo account (Development only) backing a quick-login button in the client.
-    public sealed record DemoAccount(string FullName, string Email, string Password, Role Role);
+    public sealed record DemoAccount(string FullName, string Email, string Password, Role Role, Guid? DepartmentId);
 
     // Passwords are dev/demo only and intentionally known; they must be rotated before any
     // non-dev environment. Quote them directly when logging in to the local dev API.
-    public static readonly DemoAccount DemoAdmin = new("Administrator", "admin@shiftledger.local", "Admin#12345", Role.Admin);
-    public static readonly DemoAccount DemoEmployee = new("Sam Carter", "sam@shiftledger.local", "Employee#123", Role.Employee);
-    public static readonly DemoAccount DemoEmployee2 = new("Jordan Lee", "jordan@shiftledger.local", "Employee#123", Role.Employee);
-    public static readonly DemoAccount DemoEmployee3 = new("Alex Kim", "alex@shiftledger.local", "Employee#123", Role.Employee);
+    public static readonly DemoAccount DemoSuperAdmin =
+        new("Administrator", "admin@shiftledger.local", "Admin#12345", Role.SuperAdmin, DepartmentId: null);
+
+    public static readonly DemoAccount DemoMechanicsAdmin =
+        new("Morgan Reyes", "morgan@shiftledger.local", "DeptAdmin#123", Role.DepartmentAdmin, DepartmentConfiguration.MechanicsId);
+    public static readonly DemoAccount DemoMechanicsEmployee1 =
+        new("Sam Carter", "sam@shiftledger.local", "Employee#123", Role.Employee, DepartmentConfiguration.MechanicsId);
+    public static readonly DemoAccount DemoMechanicsEmployee2 =
+        new("Jordan Lee", "jordan@shiftledger.local", "Employee#123", Role.Employee, DepartmentConfiguration.MechanicsId);
+
+    public static readonly DemoAccount DemoBikeWashAdmin =
+        new("Priya Shah", "priya@shiftledger.local", "DeptAdmin#123", Role.DepartmentAdmin, DepartmentConfiguration.BikeWashId);
+    public static readonly DemoAccount DemoBikeWashEmployee1 =
+        new("Alex Kim", "alex@shiftledger.local", "Employee#123", Role.Employee, DepartmentConfiguration.BikeWashId);
+    public static readonly DemoAccount DemoBikeWashEmployee2 =
+        new("Chris Park", "chris@shiftledger.local", "Employee#123", Role.Employee, DepartmentConfiguration.BikeWashId);
 
     public static async Task SeedAsync(IServiceProvider services, bool seedDemoData = false)
     {
@@ -27,7 +44,7 @@ public static class DbSeeder
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
-        await SeedBootstrapAdminAsync(db, hasher, config);
+        await SeedBootstrapSuperAdminAsync(db, hasher, config);
         if (seedDemoData)
         {
             await SeedDemoDataAsync(db, hasher);
@@ -35,9 +52,9 @@ public static class DbSeeder
         }
     }
 
-    // Creates a bootstrap Admin from config (BootstrapAdmin:Email/Password) if no users exist yet,
-    // so the very first login has an account. No-op once any user exists.
-    private static async Task SeedBootstrapAdminAsync(AppDbContext db, IPasswordHasher hasher, IConfiguration config)
+    // Creates a bootstrap SuperAdmin from config (BootstrapAdmin:Email/Password) if no users exist
+    // yet, so the very first login has an account (Rule RB1). No-op once any user exists.
+    private static async Task SeedBootstrapSuperAdminAsync(AppDbContext db, IPasswordHasher hasher, IConfiguration config)
     {
         if (await db.Users.AnyAsync()) return;
 
@@ -50,42 +67,30 @@ public static class DbSeeder
             FullName = "Administrator",
             Email = email.Trim().ToLowerInvariant(),
             PasswordHash = hasher.Hash(password),
-            Role = Role.Admin,
+            Role = Role.SuperAdmin,
         });
         await db.SaveChangesAsync();
     }
 
-    // Idempotently ensures the fixed demo accounts exist. The employees also get a pay profile,
-    // a current pay rate, and a department so the P3 admin screens have data to show out of the box.
+    // Idempotently ensures the fixed demo accounts exist: one SuperAdmin plus a DepartmentAdmin
+    // and two Employees per phase-1 department. Employees also get a pay profile + current pay
+    // rate so the (parked, unsurfaced) payroll tables have realistic data ready for v3.
     private static async Task SeedDemoDataAsync(AppDbContext db, IPasswordHasher hasher)
     {
-        var admin = await EnsureUserAsync(db, hasher, DemoAdmin);
-        var sam = await EnsureUserAsync(db, hasher, DemoEmployee);
-        var jordan = await EnsureUserAsync(db, hasher, DemoEmployee2);
-        var alex = await EnsureUserAsync(db, hasher, DemoEmployee3);
+        await EnsureUserAsync(db, hasher, DemoSuperAdmin);
+        await EnsureUserAsync(db, hasher, DemoMechanicsAdmin);
+        var sam = await EnsureUserAsync(db, hasher, DemoMechanicsEmployee1);
+        var jordan = await EnsureUserAsync(db, hasher, DemoMechanicsEmployee2);
+        await EnsureUserAsync(db, hasher, DemoBikeWashAdmin);
+        var alex = await EnsureUserAsync(db, hasher, DemoBikeWashEmployee1);
+        var chris = await EnsureUserAsync(db, hasher, DemoBikeWashEmployee2);
 
         await EnsureProfileWithRateAsync(db, sam, RateType.Hourly, PayCycle.Weekly, 22.50m);
         await EnsureProfileWithRateAsync(db, jordan, RateType.Monthly, PayCycle.Monthly, 5200m);
-        await EnsureProfileWithRateAsync(db, alex, RateType.Hourly, PayCycle.Weekly, 24.00m);
-
-        var frontDesk = await EnsureDepartmentAsync(db, "Front Desk");
-        var serviceBay = await EnsureDepartmentAsync(db, "Service Bay");
-        admin.DepartmentId ??= frontDesk.Id;
-        sam.DepartmentId ??= serviceBay.Id;
-        jordan.DepartmentId ??= serviceBay.Id;
-        alex.DepartmentId ??= serviceBay.Id;
+        await EnsureProfileWithRateAsync(db, alex, RateType.Hourly, PayCycle.Weekly, 18.00m);
+        await EnsureProfileWithRateAsync(db, chris, RateType.Hourly, PayCycle.Weekly, 17.50m);
 
         await db.SaveChangesAsync();
-    }
-
-    private static async Task<Department> EnsureDepartmentAsync(AppDbContext db, string name)
-    {
-        var department = await db.Departments.FirstOrDefaultAsync(d => d.Name == name);
-        if (department is not null) return department;
-
-        department = new Department { Name = name };
-        db.Departments.Add(department);
-        return department;
     }
 
     private static async Task<User> EnsureUserAsync(AppDbContext db, IPasswordHasher hasher, DemoAccount account)
@@ -100,6 +105,7 @@ public static class DbSeeder
             Email = email,
             PasswordHash = hasher.Hash(account.Password),
             Role = account.Role,
+            DepartmentId = account.DepartmentId,
         };
         db.Users.Add(user);
         return user;
@@ -121,7 +127,7 @@ public static class DbSeeder
         });
     }
 
-    private static readonly (string Title, JobPriority Priority)[] JobTemplates =
+    private static readonly (string Title, JobPriority Priority)[] MechanicsJobTemplates =
     [
         ("Flat repair", JobPriority.Low),
         ("Brake service", JobPriority.High),
@@ -133,6 +139,15 @@ public static class DbSeeder
         ("New bike assembly", JobPriority.Medium),
         ("Disc brake bleed", JobPriority.High),
         ("Tire and tube replacement", JobPriority.Low),
+    ];
+
+    private static readonly (string Title, JobPriority Priority)[] BikeWashJobTemplates =
+    [
+        ("Standard wash", JobPriority.Low),
+        ("Deep clean + degrease", JobPriority.Medium),
+        ("Wash + chain lube", JobPriority.Low),
+        ("Frame detail & polish", JobPriority.Medium),
+        ("Wash + drivetrain clean", JobPriority.Medium),
     ];
 
     private static readonly string[] BikeModels =
@@ -148,43 +163,58 @@ public static class DbSeeder
         "Tire", "Handlebar tape", "Brake lever", "Derailleur hanger", "Spoke set",
     ];
 
-    // Populates a realistic few weeks of shop history — spread across statuses, mechanics, and
-    // paid/unpaid bills — so the dashboard charts and reports have a real distribution to draw
-    // instead of a handful of manually-created rows. Guarded on ServiceJobs being empty so it
-    // never re-seeds over jobs the shop has since created, edited, or deleted for real.
+    // Populates a realistic few weeks of history for each department - spread across statuses,
+    // employees, and paid/unpaid bills - so the dashboards/reports have a real distribution to
+    // draw instead of a handful of manually-created rows. Guarded on ServiceJobs being empty so it
+    // never re-seeds over jobs a shop has since created, edited, or deleted for real.
     private static async Task SeedDemoJobsAndBillsAsync(AppDbContext db, TimeProvider timeProvider)
     {
         if (await db.ServiceJobs.AnyAsync()) return;
 
-        var mechanicIds = await db.Users.Where(u => u.Role == Role.Employee).Select(u => u.Id).ToListAsync();
-        if (mechanicIds.Count == 0) return;
+        var rng = new Random(20260101); // fixed seed: reproducible demo data across both departments
+
+        await SeedDepartmentJobsAndBillsAsync(
+            db, timeProvider, rng, DepartmentConfiguration.MechanicsId, MechanicsJobTemplates,
+            laborRate: 45m, jobCount: 25);
+        await SeedDepartmentJobsAndBillsAsync(
+            db, timeProvider, rng, DepartmentConfiguration.BikeWashId, BikeWashJobTemplates,
+            laborRate: 18m, jobCount: 20);
+    }
+
+    private static async Task SeedDepartmentJobsAndBillsAsync(
+        AppDbContext db, TimeProvider timeProvider, Random rng, Guid departmentId,
+        (string Title, JobPriority Priority)[] jobTemplates, decimal laborRate, int jobCount)
+    {
+        var employeeIds = await db.Users
+            .Where(u => u.Role == Role.Employee && u.DepartmentId == departmentId)
+            .Select(u => u.Id).ToListAsync();
+        if (employeeIds.Count == 0) return;
 
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
         var today = DateOnly.FromDateTime(nowUtc);
-        var rng = new Random(20260101); // fixed seed: reproducible demo data
 
         var jobs = new List<ServiceJob>();
         var bills = new List<Bill>();
         var lineItems = new List<BillLineItem>();
 
-        const int jobCount = 45;
         for (var i = 0; i < jobCount; i++)
         {
-            var template = JobTemplates[rng.Next(JobTemplates.Length)];
+            var template = jobTemplates[rng.Next(jobTemplates.Length)];
             var daysAgo = rng.Next(0, 45);
             var receivedDate = today.AddDays(-daysAgo);
             var status = PickStatus(rng, daysAgo);
 
             var job = new ServiceJob
             {
+                DepartmentId = departmentId,
                 Title = template.Title,
                 BikeModel = BikeModels[rng.Next(BikeModels.Length)],
                 Priority = template.Priority,
                 Status = status,
-                // A brand-new intake is sometimes still unassigned; anything further along always has a mechanic.
+                // A brand-new intake is sometimes still unassigned; anything further along always has an assignee.
                 AssignedMechanicId = status == JobStatus.Received && rng.Next(4) == 0
                     ? null
-                    : mechanicIds[rng.Next(mechanicIds.Count)],
+                    : employeeIds[rng.Next(employeeIds.Count)],
                 ReceivedDate = receivedDate,
                 DueDate = receivedDate.AddDays(rng.Next(1, 7)),
             };
@@ -207,7 +237,7 @@ public static class DbSeeder
             var laborHours = Math.Round(rng.Next(5, 30) / 10m, 1);
             lineItems.Add(new BillLineItem
             {
-                BillId = bill.Id, Type = LineItemType.Labor, Description = "Labor", Quantity = laborHours, UnitPrice = 45m,
+                BillId = bill.Id, Type = LineItemType.Labor, Description = "Labor", Quantity = laborHours, UnitPrice = laborRate,
             });
             if (rng.Next(100) < 70)
             {
