@@ -17,12 +17,17 @@ public class JwtTokenService(IOptions<JwtOptions> options, TimeProvider timeProv
     {
         var expiresAtUtc = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(_options.AccessTokenMinutes);
 
-        Claim[] claims =
-        [
+        var claims = new List<Claim>
+        {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(ClaimTypes.Role, user.Role.ToString()),
-        ];
+        };
+        // Rule RB2: DepartmentAdmin/Employee carry their department; SuperAdmin has none.
+        if (user.DepartmentId is { } departmentId)
+        {
+            claims.Add(new Claim("dept", departmentId.ToString()));
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -20,7 +20,19 @@ public class CurrentUser(IHttpContextAccessor accessor) : ICurrentUser
         }
     }
 
-    public bool IsAdmin => Principal?.IsInRole(nameof(Role.Admin)) ?? false;
+    public bool IsSuperAdmin => Principal?.IsInRole(nameof(Role.SuperAdmin)) ?? false;
+
+    public bool IsAdmin => IsSuperAdmin || (Principal?.IsInRole(nameof(Role.DepartmentAdmin)) ?? false);
+
+    // Emitted as a plain "dept" claim by JwtTokenService (Rule RB2); absent/empty for SuperAdmin.
+    public Guid? DepartmentId
+    {
+        get
+        {
+            var dept = Principal?.FindFirstValue("dept");
+            return Guid.TryParse(dept, out var id) ? id : null;
+        }
+    }
 
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated ?? false;
 }
