@@ -7,7 +7,7 @@ namespace ShiftLedger.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/departments")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
 public class DepartmentsController(ISender mediator) : ControllerBase
 {
     [HttpGet]

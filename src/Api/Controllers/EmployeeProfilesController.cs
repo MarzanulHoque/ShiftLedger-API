@@ -9,7 +9,7 @@ namespace ShiftLedger.Api.Controllers;
 // A user's pay profile and effective-dated rate history (admin-provisioned).
 [ApiController]
 [Route("api/v1/users/{userId:guid}")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
 public class EmployeeProfilesController(ISender mediator) : ControllerBase
 {
     [HttpGet("employee-profile")]

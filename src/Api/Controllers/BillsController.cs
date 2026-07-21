@@ -12,7 +12,7 @@ namespace ShiftLedger.Api.Controllers;
 // billing access). Routed under api/v1 so the job-scoped bill endpoints read naturally.
 [ApiController]
 [Route("api/v1")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
 public class BillsController(ISender mediator, IInvoiceExporter invoiceExporter) : ControllerBase
 {
     [HttpGet("bills")]

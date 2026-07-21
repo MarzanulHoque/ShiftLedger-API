@@ -23,11 +23,11 @@ public class JobsController(ISender mediator) : ControllerBase
     public async Task<ActionResult<JobDto>> GetById(Guid id) => Ok(await mediator.Send(new GetJobQuery(id)));
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
     public async Task<ActionResult<Guid>> Create(CreateJobCommand command) => Ok(await mediator.Send(command));
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
     public async Task<IActionResult> Update(Guid id, UpdateJobCommand command)
     {
         if (id != command.Id)
@@ -39,7 +39,7 @@ public class JobsController(ISender mediator) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
     public async Task<IActionResult> Delete(Guid id)
     {
         await mediator.Send(new DeleteJobCommand(id));
@@ -54,7 +54,7 @@ public class JobsController(ISender mediator) : ControllerBase
     }
 
     [HttpPatch("{id:guid}/assign")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
     public async Task<IActionResult> Assign(Guid id, AssignMechanicRequest request)
     {
         await mediator.Send(new AssignMechanicCommand(id, request.MechanicId));
@@ -70,7 +70,7 @@ public class JobsController(ISender mediator) : ControllerBase
         => Ok(await mediator.Send(new AddJobCommentCommand(id, request.Body)));
 
     [HttpGet("{id:guid}/history")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
     public async Task<ActionResult<IReadOnlyList<JobHistoryEntryDto>>> GetHistory(Guid id)
         => Ok(await mediator.Send(new GetJobHistoryQuery(id)));
 }

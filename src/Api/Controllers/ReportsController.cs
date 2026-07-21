@@ -10,7 +10,7 @@ namespace ShiftLedger.Api.Controllers;
 // Reports (Admin-only). format=json (default, feeds the UI table) | pdf | excel (downloads).
 [ApiController]
 [Route("api/v1/reports")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
 public class ReportsController(ISender mediator, IReportExporter exporter) : ControllerBase
 {
     private const string ExcelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

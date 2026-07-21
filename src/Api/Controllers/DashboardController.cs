@@ -11,7 +11,7 @@ public class DashboardController(ISender mediator) : ControllerBase
 {
     // The owner's day view. `date` is the caller's local calendar date (T8); defaults to UTC today.
     [HttpGet("admin")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
     public async Task<ActionResult<AdminDashboardDto>> Admin([FromQuery] DateOnly? date)
         => Ok(await mediator.Send(new GetAdminDashboardQuery(date)));
 
