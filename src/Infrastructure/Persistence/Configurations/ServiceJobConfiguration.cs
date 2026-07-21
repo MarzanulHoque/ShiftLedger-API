@@ -19,10 +19,18 @@ public class ServiceJobConfiguration : IEntityTypeConfiguration<ServiceJob>
         builder.HasIndex(j => j.Status);
         builder.HasIndex(j => j.AssignedMechanicId);
         builder.HasIndex(j => j.ReceivedDate);
+        builder.HasIndex(j => j.DepartmentId); // department scope filter (Rule RB3)
 
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(j => j.AssignedMechanicId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Every job belongs to exactly one department (Rule RB3); Bill/BillLineItem/JobComment
+        // inherit scope through this FK rather than duplicating DepartmentId (avoids C2 drift).
+        builder.HasOne<Department>()
+            .WithMany()
+            .HasForeignKey(j => j.DepartmentId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

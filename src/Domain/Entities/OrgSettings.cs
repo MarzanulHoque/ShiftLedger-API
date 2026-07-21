@@ -9,4 +9,5 @@ public class OrgSettings : BaseEntity
     public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
     public string CurrencyCode { get; set; } = "USD";   // ISO 4217
     public decimal OvertimeMultiplier { get; set; } = 1.5m;
+    public int UnpaidAlertDays { get; set; } = 7;         // Rule N3: unpaid-bill alert threshold
 }

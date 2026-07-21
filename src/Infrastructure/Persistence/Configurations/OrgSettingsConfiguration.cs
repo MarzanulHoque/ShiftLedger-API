@@ -21,6 +21,7 @@ public class OrgSettingsConfiguration : IEntityTypeConfiguration<OrgSettings>
             WeekStartDay = DayOfWeek.Monday,
             CurrencyCode = "USD",
             OvertimeMultiplier = 1.5m,
+            UnpaidAlertDays = 7,
             RowVersion = SeedRowVersion,
         });
     }

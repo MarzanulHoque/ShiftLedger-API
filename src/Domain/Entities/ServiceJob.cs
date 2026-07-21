@@ -10,6 +10,7 @@ public class ServiceJob : BaseEntity, ISoftDeletable
     // Human-readable intake number (e.g. "JOB-000123"), DB-assigned via MySQL AUTO_INCREMENT —
     // separate from Id (the UUIDv7 stays the non-enumerable routing/lookup key).
     public int JobNumber { get; set; }
+    public Guid DepartmentId { get; set; }               // FK Department (Rule RB3: isolation boundary)
     public string Title { get; set; } = default!;
     public string? Description { get; set; }
     public string BikeModel { get; set; } = default!;    // free text in v1 (no Customer/Bike entity)
