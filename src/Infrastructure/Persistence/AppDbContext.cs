@@ -186,6 +186,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
             }
         }
 
+        // Rule RB3: a ServiceJob never leaks across the department boundary. This replaces (not
+        // adds to) the generic soft-delete filter applied above for ServiceJob, so it must repeat
+        // the !IsDeleted check itself — EF Core keeps only the last HasQueryFilter per entity.
+        // Skipped when no ICurrentUser is supplied (design-time tooling, raw test contexts) and
+        // when the caller isn't authenticated (app-startup seeding) — both are trusted, non-request
+        // contexts. SuperAdmin (RB0/RB1) always bypasses the scope.
+        if (currentUser is { } user)
+        {
+            modelBuilder.Entity<ServiceJob>().HasQueryFilter(j =>
+                !j.IsDeleted &&
+                (!user.IsAuthenticated || user.IsSuperAdmin || j.DepartmentId == user.DepartmentId));
+        }
+
         base.OnModelCreating(modelBuilder);
     }
 
