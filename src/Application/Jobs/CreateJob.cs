@@ -32,14 +32,17 @@ public class CreateJobCommandValidator : AbstractValidator<CreateJobCommand>
     }
 }
 
-public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider, INotifier notifier)
+public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider, INotifier notifier, IDepartmentScope departmentScope)
     : IRequestHandler<CreateJobCommand, Guid>
 {
     public async Task<Guid> Handle(CreateJobCommand request, CancellationToken cancellationToken)
     {
+        // Rule RB3/RB4: a DepartmentAdmin may only create jobs in their own department; SuperAdmin bypasses (RB0).
+        departmentScope.EnsureAccess(request.DepartmentId);
+
         if (request.AssignedMechanicId is { } mechanicId)
         {
-            await EnsureMechanicAsync(db, mechanicId, cancellationToken);
+            await EnsureMechanicAsync(db, mechanicId, request.DepartmentId, cancellationToken);
         }
 
         var job = new ServiceJob
@@ -64,12 +67,14 @@ public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider
         return job.Id;
     }
 
-    // Rule J2: a job's assignee must be an existing user with the Employee (mechanic) role.
-    internal static async Task EnsureMechanicAsync(IAppDbContext db, Guid mechanicId, CancellationToken ct)
+    // Rule J2 (extended for RB3): a job's assignee must be an existing Employee-role user who
+    // belongs to the job's own department — a mechanic never works a job outside their department.
+    internal static async Task EnsureMechanicAsync(IAppDbContext db, Guid mechanicId, Guid jobDepartmentId, CancellationToken ct)
     {
-        var role = await db.Users.Where(u => u.Id == mechanicId)
-            .Select(u => (Role?)u.Role).FirstOrDefaultAsync(ct);
-        if (role is null) throw new NotFoundException("Assigned mechanic not found.");
-        if (role != Role.Employee) throw new BusinessRuleException("Only an Employee (mechanic) can be assigned to a job.");
+        var mechanic = await db.Users.Where(u => u.Id == mechanicId)
+            .Select(u => new { u.Role, u.DepartmentId }).FirstOrDefaultAsync(ct);
+        if (mechanic is null) throw new NotFoundException("Assigned mechanic not found.");
+        if (mechanic.Role != Role.Employee) throw new BusinessRuleException("Only an Employee (mechanic) can be assigned to a job.");
+        if (mechanic.DepartmentId != jobDepartmentId) throw new BusinessRuleException("The assigned mechanic must belong to the job's department.");
     }
 }

@@ -186,18 +186,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider t
             }
         }
 
-        // Rule RB3: a ServiceJob never leaks across the department boundary. This replaces (not
-        // adds to) the generic soft-delete filter applied above for ServiceJob, so it must repeat
-        // the !IsDeleted check itself — EF Core keeps only the last HasQueryFilter per entity.
-        // Skipped when no ICurrentUser is supplied (design-time tooling, raw test contexts) and
-        // when the caller isn't authenticated (app-startup seeding) — both are trusted, non-request
-        // contexts. SuperAdmin (RB0/RB1) always bypasses the scope.
-        if (currentUser is { } user)
-        {
-            modelBuilder.Entity<ServiceJob>().HasQueryFilter(j =>
-                !j.IsDeleted &&
-                (!user.IsAuthenticated || user.IsSuperAdmin || j.DepartmentId == user.DepartmentId));
-        }
+        // Rule RB3: department scoping for ServiceJob is deliberately NOT a global query filter.
+        // An earlier version of this filter closed over the injected ICurrentUser directly
+        // (`j.DepartmentId == user.DepartmentId`, bypassed for SuperAdmin) — but EF Core's compiled
+        // query cache can freeze that closure's boolean/comparison outcome to whichever ICurrentUser
+        // first compiled a given query shape, silently reusing it for later calls with a *different*
+        // user (verified empirically: a SuperAdmin's own lookup started failing after a
+        // DepartmentAdmin's query had run first against the same code path). Since the same model
+        // and query-plan cache is shared for the app's entire lifetime — not just per-request — this
+        // is a real bypass risk in production, not just a test artifact. Department scoping is
+        // instead enforced explicitly in every handler (see e.g. GetJob/GetJobs/GetJobHistory,
+        // BillGuards), the same handler-level pattern already used for Bill/BillLineItem/JobComment
+        // (Rule RB0 via IDepartmentScope). ServiceJob keeps only the generic soft-delete filter
+        // applied by the loop above.
 
         base.OnModelCreating(modelBuilder);
     }

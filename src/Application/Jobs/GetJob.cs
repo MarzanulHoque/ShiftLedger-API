@@ -14,6 +14,13 @@ public class GetJobQueryHandler(IAppDbContext db, ICurrentUser currentUser) : IR
         var job = await db.ServiceJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == request.Id, cancellationToken)
             ?? throw new NotFoundException("Service job not found.");
 
+        // Rule RB3/RB4: a job outside the caller's department reads as "not found" (info-hiding),
+        // same as a mechanic viewing another mechanic's job below. SuperAdmin bypasses (RB0).
+        if (!currentUser.IsSuperAdmin && job.DepartmentId != currentUser.DepartmentId)
+        {
+            throw new NotFoundException("Service job not found.");
+        }
+
         // Rule R2/R3: a mechanic can only open a job assigned to them.
         if (!currentUser.IsAdmin && job.AssignedMechanicId != currentUser.UserId)
         {

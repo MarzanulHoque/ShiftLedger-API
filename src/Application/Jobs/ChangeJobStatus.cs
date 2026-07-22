@@ -17,6 +17,12 @@ public class ChangeJobStatusCommandHandler(IAppDbContext db, ICurrentUser curren
         var job = await db.ServiceJobs.FirstOrDefaultAsync(j => j.Id == request.Id, cancellationToken)
             ?? throw new NotFoundException("Service job not found.");
 
+        // Rule RB3/RB4: a job outside the caller's department reads as "not found". SuperAdmin bypasses (RB0).
+        if (!currentUser.IsSuperAdmin && job.DepartmentId != currentUser.DepartmentId)
+        {
+            throw new NotFoundException("Service job not found.");
+        }
+
         // Rule R2/R3: only an Admin or the assigned mechanic may move a job.
         if (!currentUser.IsAdmin && job.AssignedMechanicId != currentUser.UserId)
         {

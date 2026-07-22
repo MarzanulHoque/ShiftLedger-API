@@ -26,9 +26,18 @@ public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
         {
             query = query.Where(j => j.AssignedMechanicId == currentUser.UserId);
         }
-        else if (request.MechanicId is { } mechanicId)
+        else
         {
-            query = query.Where(j => j.AssignedMechanicId == mechanicId);
+            // Rule RB3/RB4: a DepartmentAdmin only ever sees their own department's jobs; SuperAdmin bypasses (RB0).
+            if (!currentUser.IsSuperAdmin)
+            {
+                query = query.Where(j => j.DepartmentId == currentUser.DepartmentId);
+            }
+
+            if (request.MechanicId is { } mechanicId)
+            {
+                query = query.Where(j => j.AssignedMechanicId == mechanicId);
+            }
         }
 
         if (request.Status is { } status)
@@ -39,6 +48,7 @@ public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
         return await query
             .OrderByDescending(j => j.ReceivedDate)
             .ThenBy(j => j.Title)
+            .ThenBy(j => j.Id) // UUIDv7 tiebreaker: ReceivedDate/Title alone can tie, which would make paging unstable
             .Select(j => new JobDto(
                 j.Id, j.JobNumber, j.DepartmentId, j.Title, j.Description, j.BikeModel, j.Status, j.Priority,
                 j.AssignedMechanicId, j.ReceivedDate, j.DueDate))

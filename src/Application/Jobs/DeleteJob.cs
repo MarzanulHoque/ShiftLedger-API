@@ -7,12 +7,18 @@ namespace ShiftLedger.Application.Jobs;
 
 public record DeleteJobCommand(Guid Id) : IRequest;
 
-public class DeleteJobCommandHandler(IAppDbContext db) : IRequestHandler<DeleteJobCommand>
+public class DeleteJobCommandHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<DeleteJobCommand>
 {
     public async Task Handle(DeleteJobCommand request, CancellationToken cancellationToken)
     {
         var job = await db.ServiceJobs.FirstOrDefaultAsync(j => j.Id == request.Id, cancellationToken)
             ?? throw new NotFoundException("Service job not found.");
+
+        // Rule RB3/RB4: a DepartmentAdmin cannot delete another department's job. SuperAdmin bypasses (RB0).
+        if (!currentUser.IsSuperAdmin && job.DepartmentId != currentUser.DepartmentId)
+        {
+            throw new NotFoundException("Service job not found.");
+        }
 
         // A paid bill is an immutable financial record (Rule B3/immutability) — the job it
         // documents must stay resolvable (history, invoice re-download), so deletion is blocked

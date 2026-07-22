@@ -22,12 +22,18 @@ public class UpdateJobCommandValidator : AbstractValidator<UpdateJobCommand>
     }
 }
 
-public class UpdateJobCommandHandler(IAppDbContext db) : IRequestHandler<UpdateJobCommand>
+public class UpdateJobCommandHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<UpdateJobCommand>
 {
     public async Task Handle(UpdateJobCommand request, CancellationToken cancellationToken)
     {
         var job = await db.ServiceJobs.FirstOrDefaultAsync(j => j.Id == request.Id, cancellationToken)
             ?? throw new NotFoundException("Service job not found.");
+
+        // Rule RB3/RB4: a DepartmentAdmin cannot edit another department's job. SuperAdmin bypasses (RB0).
+        if (!currentUser.IsSuperAdmin && job.DepartmentId != currentUser.DepartmentId)
+        {
+            throw new NotFoundException("Service job not found.");
+        }
 
         job.Title = request.Title.Trim();
         job.Description = request.Description?.Trim();
