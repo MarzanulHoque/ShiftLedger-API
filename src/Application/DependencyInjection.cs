@@ -1,7 +1,9 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using ShiftLedger.Application.Common.Authorization;
 using ShiftLedger.Application.Common.Behaviors;
+using ShiftLedger.Application.Common.Interfaces;
 
 namespace ShiftLedger.Application;
 
@@ -21,6 +23,7 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(applicationAssembly);
+        services.AddScoped<IDepartmentScope, DepartmentScope>();
 
         return services;
     }
