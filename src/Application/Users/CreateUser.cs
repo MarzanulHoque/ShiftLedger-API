@@ -22,11 +22,32 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
     }
 }
 
-public class CreateUserCommandHandler(IAppDbContext db, IPasswordHasher hasher)
+public class CreateUserCommandHandler(IAppDbContext db, IPasswordHasher hasher, ICurrentUser currentUser, IDepartmentScope departmentScope)
     : IRequestHandler<CreateUserCommand, Guid>
 {
     public async Task<Guid> Handle(CreateUserCommand request, CancellationToken cancellationToken)
     {
+        // Rule RB1: the single org-wide Super Admin is seeded once at startup, never provisioned via this endpoint.
+        if (request.Role == Role.SuperAdmin)
+        {
+            throw new BusinessRuleException("A Super Admin account cannot be created here.");
+        }
+
+        if (request.DepartmentId is not { } departmentId)
+        {
+            throw new BusinessRuleException("A department is required for this role.");
+        }
+
+        // Rule RB5: a DepartmentAdmin may only provision Employees into their own department; SuperAdmin bypasses (RB0).
+        if (!currentUser.IsSuperAdmin)
+        {
+            if (request.Role != Role.Employee)
+            {
+                throw new ForbiddenException();
+            }
+            departmentScope.EnsureAccess(departmentId);
+        }
+
         var email = request.Email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
         {
