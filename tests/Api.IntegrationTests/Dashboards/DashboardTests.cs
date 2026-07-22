@@ -28,13 +28,14 @@ public class DashboardTests(IntegrationTestFixture fixture)
 
         await using (var ctx = fixture.CreateContext())
         {
-            var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            var scopeAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(scopeAdmin))
                 .Handle(new CreateJobCommand("Dashboard job", null, "Cannondale Trail", null, null, null, null,
                     DepartmentConfiguration.MechanicsId), default);
-            var billId = await new CreateBillCommandHandler(ctx).Handle(new CreateBillCommand(jobId), default);
-            await new AddLineItemCommandHandler(ctx)
+            var billId = await new CreateBillCommandHandler(ctx, scopeAdmin).Handle(new CreateBillCommand(jobId), default);
+            await new AddLineItemCommandHandler(ctx, scopeAdmin)
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Dashboard labor", 1m, 777m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), scopeAdmin)
                 .Handle(new SetBillPaidCommand(billId, true), default);
         }
 
@@ -54,13 +55,14 @@ public class DashboardTests(IntegrationTestFixture fixture)
         Guid mechanicId, otherMechanicId, myJobId;
         await using (var setup = fixture.CreateContext())
         {
-            var users = new CreateUserCommandHandler(setup, new PasswordHasher());
+            var scopeAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            var users = new CreateUserCommandHandler(setup, new PasswordHasher(), scopeAdmin, TestDepartmentScope.For(scopeAdmin));
             mechanicId = await users.Handle(
-                new CreateUserCommand("Dash Mech", "p6-dash-mech@test.local", "Secret#123", Role.Employee, null), default);
+                new CreateUserCommand("Dash Mech", "p6-dash-mech@test.local", "Secret#123", Role.Employee, DepartmentConfiguration.MechanicsId), default);
             otherMechanicId = await users.Handle(
-                new CreateUserCommand("Dash Other", "p6-dash-other@test.local", "Secret#123", Role.Employee, null), default);
+                new CreateUserCommand("Dash Other", "p6-dash-other@test.local", "Secret#123", Role.Employee, DepartmentConfiguration.MechanicsId), default);
 
-            var jobs = new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup));
+            var jobs = new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(scopeAdmin));
             myJobId = await jobs.Handle(
                 new CreateJobCommand("My dash job", null, "Merida Big Nine", null, mechanicId, null, null,
                     DepartmentConfiguration.MechanicsId), default);

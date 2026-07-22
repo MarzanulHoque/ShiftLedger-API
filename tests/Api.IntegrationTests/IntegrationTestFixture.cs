@@ -10,6 +10,7 @@ namespace ShiftLedger.Api.IntegrationTests;
 public class IntegrationTestFixture : IAsyncLifetime
 {
     private readonly DbContextOptions<AppDbContext> _options;
+    private readonly AmbientCurrentUser _ambientUser = new();
 
     public IntegrationTestFixture()
     {
@@ -25,10 +26,20 @@ public class IntegrationTestFixture : IAsyncLifetime
             .Options;
     }
 
-    public AppDbContext CreateContext() => new(_options, TimeProvider.System);
+    public AppDbContext CreateContext()
+    {
+        _ambientUser.Set(null);
+        return new(_options, TimeProvider.System, _ambientUser);
+    }
 
-    // Overload for tests that need audit rows stamped with an acting user (Rule A1) or a specific caller.
-    public AppDbContext CreateContext(ICurrentUser currentUser) => new(_options, TimeProvider.System, currentUser);
+    // Overload for tests that need audit rows stamped with an acting user (Rule A1) or a specific
+    // caller (Rule RB3's department filter). Routes through the same stable AmbientCurrentUser
+    // identity as the no-arg overload — see AmbientCurrentUser for why that's required.
+    public AppDbContext CreateContext(ICurrentUser currentUser)
+    {
+        _ambientUser.Set(currentUser);
+        return new(_options, TimeProvider.System, _ambientUser);
+    }
 
     public async Task InitializeAsync()
     {

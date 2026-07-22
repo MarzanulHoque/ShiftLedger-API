@@ -15,15 +15,16 @@ public class ReportTests(IntegrationTestFixture fixture)
     private async Task<Guid> CreateBilledJobAsync(string title, decimal amount, bool paid)
     {
         await using var ctx = fixture.CreateContext();
-        var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+        var admin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(admin))
             .Handle(new CreateJobCommand(title, null, "Test bike", null, null, null, null,
                 DepartmentConfiguration.MechanicsId), default);
-        var billId = await new CreateBillCommandHandler(ctx).Handle(new CreateBillCommand(jobId), default);
-        await new AddLineItemCommandHandler(ctx)
+        var billId = await new CreateBillCommandHandler(ctx, admin).Handle(new CreateBillCommand(jobId), default);
+        await new AddLineItemCommandHandler(ctx, admin)
             .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Service", 1m, amount), default);
         if (paid)
         {
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), admin)
                 .Handle(new SetBillPaidCommand(billId, true), default);
         }
         return jobId;

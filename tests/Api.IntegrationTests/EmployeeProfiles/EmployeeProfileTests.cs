@@ -6,6 +6,7 @@ using ShiftLedger.Application.PayRates;
 using ShiftLedger.Application.Users;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
+using ShiftLedger.Infrastructure.Persistence.Configurations;
 using ShiftLedger.Infrastructure.Security;
 using Xunit;
 
@@ -15,8 +16,11 @@ namespace ShiftLedger.Api.IntegrationTests.EmployeeProfiles;
 public class EmployeeProfileTests(IntegrationTestFixture fixture)
 {
     private async Task<Guid> CreateUserAsync(AppDbContext ctx, string email)
-        => await new CreateUserCommandHandler(ctx, new PasswordHasher())
-            .Handle(new CreateUserCommand("Emp Loyee", email, "Secret#123", Role.Employee, null), default);
+    {
+        var admin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        return await new CreateUserCommandHandler(ctx, new PasswordHasher(), admin, TestDepartmentScope.For(admin))
+            .Handle(new CreateUserCommand("Emp Loyee", email, "Secret#123", Role.Employee, DepartmentConfiguration.MechanicsId), default);
+    }
 
     [Fact]
     public async Task Upsert_CreatesThenUpdates_SameSingleProfile()

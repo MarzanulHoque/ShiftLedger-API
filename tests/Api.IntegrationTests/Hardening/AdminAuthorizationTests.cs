@@ -15,6 +15,11 @@ public class AdminAuthorizationTests
         member.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
             .Any(a => a.Roles?.Contains("Admin") == true);
 
+    // P9: department CRUD is narrowed to SuperAdmin only (RB0 already grants org-wide CRUD).
+    private static bool RequiresSuperAdminOnly(MemberInfo member) =>
+        member.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .Any(a => a.Roles == "SuperAdmin");
+
     // Whole controllers that are the owner's domain (R1).
     [Theory]
     [InlineData(typeof(UsersController))]
@@ -37,5 +42,14 @@ public class AdminAuthorizationTests
     public void AdminActions_RequireAdminRole_R1(Type controller, string action)
     {
         RequiresAdmin(controller.GetMethod(action)!).Should().BeTrue($"{controller.Name}.{action} is Admin-only (R1)");
+    }
+
+    [Theory]
+    [InlineData(typeof(DepartmentsController), nameof(DepartmentsController.Create))]
+    [InlineData(typeof(DepartmentsController), nameof(DepartmentsController.Update))]
+    [InlineData(typeof(DepartmentsController), nameof(DepartmentsController.Delete))]
+    public void DepartmentMutations_RequireSuperAdminOnly_P9(Type controller, string action)
+    {
+        RequiresSuperAdminOnly(controller.GetMethod(action)!).Should().BeTrue($"{controller.Name}.{action} is SuperAdmin-only (P9)");
     }
 }

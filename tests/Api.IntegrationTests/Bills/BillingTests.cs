@@ -12,16 +12,19 @@ namespace ShiftLedger.Api.IntegrationTests.Bills;
 [Collection("Database")]
 public class BillingTests(IntegrationTestFixture fixture)
 {
-    private static async Task<Guid> CreateJobAsync(AppDbContext ctx) =>
-        await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx)).Handle(
+    private static async Task<Guid> CreateJobAsync(AppDbContext ctx)
+    {
+        var admin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        return await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(admin)).Handle(
             new CreateJobCommand("Tune-up", null, "Giant Escape 3", JobPriority.Medium, null, null, null,
                 DepartmentConfiguration.MechanicsId), default);
+    }
 
     private async Task<(Guid JobId, Guid BillId)> CreateJobWithBillAsync()
     {
         await using var ctx = fixture.CreateContext();
         var jobId = await CreateJobAsync(ctx);
-        var billId = await new CreateBillCommandHandler(ctx).Handle(new CreateBillCommand(jobId), default);
+        var billId = await new CreateBillCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new CreateBillCommand(jobId), default);
         return (jobId, billId);
     }
 
@@ -32,7 +35,7 @@ public class BillingTests(IntegrationTestFixture fixture)
         var (jobId, _) = await CreateJobWithBillAsync();
 
         await using var ctx = fixture.CreateContext();
-        var again = () => new CreateBillCommandHandler(ctx).Handle(new CreateBillCommand(jobId), default);
+        var again = () => new CreateBillCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new CreateBillCommand(jobId), default);
         await again.Should().ThrowAsync<BusinessRuleException>();
     }
 
@@ -45,14 +48,14 @@ public class BillingTests(IntegrationTestFixture fixture)
         Guid laborId;
         await using (var ctx = fixture.CreateContext())
         {
-            var add = new AddLineItemCommandHandler(ctx);
+            var add = new AddLineItemCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()));
             laborId = await add.Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Brake adjustment", 1m, 500m), default);
             await add.Handle(new AddLineItemCommand(billId, LineItemType.Part, "Brake pad set", 2m, 300m), default);
         }
 
         await using (var verify = fixture.CreateContext())
         {
-            var bill = await new GetJobBillQueryHandler(verify).Handle(new GetJobBillQuery(jobId), default);
+            var bill = await new GetJobBillQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetJobBillQuery(jobId), default);
             bill.Total.Should().Be(1100m);
             bill.Lines.Should().HaveCount(2);
         }
@@ -60,13 +63,13 @@ public class BillingTests(IntegrationTestFixture fixture)
         // Change the labor line -> the computed total moves with it (no stored copy to drift).
         await using (var ctx = fixture.CreateContext())
         {
-            await new UpdateLineItemCommandHandler(ctx).Handle(
+            await new UpdateLineItemCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(
                 new UpdateLineItemCommand(billId, laborId, LineItemType.Labor, "Brake adjustment", 2m, 500m), default);
         }
 
         await using (var verify = fixture.CreateContext())
         {
-            var bill = await new GetJobBillQueryHandler(verify).Handle(new GetJobBillQuery(jobId), default);
+            var bill = await new GetJobBillQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetJobBillQuery(jobId), default);
             bill.Total.Should().Be(1600m);
         }
     }
@@ -80,23 +83,23 @@ public class BillingTests(IntegrationTestFixture fixture)
         Guid lineId;
         await using (var ctx = fixture.CreateContext())
         {
-            lineId = await new AddLineItemCommandHandler(ctx)
+            lineId = await new AddLineItemCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Full service", 1m, 1500m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new SetBillPaidCommand(billId, true), default);
         }
 
         await using var locked = fixture.CreateContext();
 
-        var addLine = () => new AddLineItemCommandHandler(locked)
+        var addLine = () => new AddLineItemCommandHandler(locked, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new AddLineItemCommand(billId, LineItemType.Part, "Chain", 1m, 250m), default);
         await addLine.Should().ThrowAsync<BusinessRuleException>();
 
-        var updateLine = () => new UpdateLineItemCommandHandler(locked)
+        var updateLine = () => new UpdateLineItemCommandHandler(locked, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new UpdateLineItemCommand(billId, lineId, LineItemType.Labor, "Full service", 2m, 1500m), default);
         await updateLine.Should().ThrowAsync<BusinessRuleException>();
 
-        var deleteLine = () => new DeleteLineItemCommandHandler(locked)
+        var deleteLine = () => new DeleteLineItemCommandHandler(locked, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new DeleteLineItemCommand(billId, lineId), default);
         await deleteLine.Should().ThrowAsync<BusinessRuleException>();
     }
@@ -109,31 +112,31 @@ public class BillingTests(IntegrationTestFixture fixture)
 
         await using (var ctx = fixture.CreateContext())
         {
-            await new AddLineItemCommandHandler(ctx)
+            await new AddLineItemCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Wheel truing", 1m, 400m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new SetBillPaidCommand(billId, true), default);
         }
 
         await using (var verify = fixture.CreateContext())
         {
-            var bill = await new GetJobBillQueryHandler(verify).Handle(new GetJobBillQuery(jobId), default);
+            var bill = await new GetJobBillQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetJobBillQuery(jobId), default);
             bill.IsPaid.Should().BeTrue();
             bill.PaidAtUtc.Should().NotBeNull();
         }
 
         await using (var ctx = fixture.CreateContext())
         {
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new SetBillPaidCommand(billId, false), default);
             // Unlocked again: an edit now succeeds.
-            await new AddLineItemCommandHandler(ctx)
+            await new AddLineItemCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new AddLineItemCommand(billId, LineItemType.Part, "Spoke", 2m, 15m), default);
         }
 
         await using (var verify = fixture.CreateContext())
         {
-            var bill = await new GetJobBillQueryHandler(verify).Handle(new GetJobBillQuery(jobId), default);
+            var bill = await new GetJobBillQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetJobBillQuery(jobId), default);
             bill.IsPaid.Should().BeFalse();
             bill.PaidAtUtc.Should().BeNull();
             bill.Lines.Should().HaveCount(2);
@@ -147,7 +150,7 @@ public class BillingTests(IntegrationTestFixture fixture)
         var (_, billId) = await CreateJobWithBillAsync();
 
         await using var ctx = fixture.CreateContext();
-        var pay = () => new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+        var pay = () => new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new SetBillPaidCommand(billId, true), default);
         await pay.Should().ThrowAsync<BusinessRuleException>();
     }
@@ -161,20 +164,20 @@ public class BillingTests(IntegrationTestFixture fixture)
 
         await using (var ctx = fixture.CreateContext())
         {
-            var add = new AddLineItemCommandHandler(ctx);
+            var add = new AddLineItemCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()));
             await add.Handle(new AddLineItemCommand(unpaidBillId, LineItemType.Labor, "Gear indexing", 1m, 350m), default);
             await add.Handle(new AddLineItemCommand(paidBillId, LineItemType.Labor, "Flat fix", 1m, 200m), default);
-            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx))
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new SetBillPaidCommand(paidBillId, true), default);
         }
 
         await using var verify = fixture.CreateContext();
 
-        var unpaid = await new GetBillsQueryHandler(verify).Handle(new GetBillsQuery(false, 1, 100), default);
+        var unpaid = await new GetBillsQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetBillsQuery(false, 1, 100), default);
         unpaid.Items.Should().Contain(b => b.Id == unpaidBillId && b.Total == 350m);
         unpaid.Items.Should().NotContain(b => b.Id == paidBillId);
 
-        var paid = await new GetBillsQueryHandler(verify).Handle(new GetBillsQuery(true, 1, 100), default);
+        var paid = await new GetBillsQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetBillsQuery(true, 1, 100), default);
         paid.Items.Should().Contain(b => b.Id == paidBillId && b.Total == 200m);
     }
 }

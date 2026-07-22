@@ -14,9 +14,12 @@ namespace ShiftLedger.Api.IntegrationTests.Notifications;
 [Collection("Database")]
 public class NotificationTests(IntegrationTestFixture fixture)
 {
-    private static async Task<Guid> CreateUserAsync(AppDbContext ctx, string email, Role role) =>
-        await new CreateUserCommandHandler(ctx, new PasswordHasher())
-            .Handle(new CreateUserCommand("Test User", email, "Secret#123", role, null), default);
+    private static async Task<Guid> CreateUserAsync(AppDbContext ctx, string email, Role role)
+    {
+        var admin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        return await new CreateUserCommandHandler(ctx, new PasswordHasher(), admin, TestDepartmentScope.For(admin))
+            .Handle(new CreateUserCommand("Test User", email, "Secret#123", role, DepartmentConfiguration.MechanicsId), default);
+    }
 
     // Assigning a job persists a JobAssigned notification for the mechanic — and only for them.
     [Fact]
@@ -27,14 +30,15 @@ public class NotificationTests(IntegrationTestFixture fixture)
         {
             mechanicId = await CreateUserAsync(setup, "p6-mech@test.local", Role.Employee);
             otherId = await CreateUserAsync(setup, "p6-other@test.local", Role.Employee);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup))
+            var scopeAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(scopeAdmin))
                 .Handle(new CreateJobCommand("Fork service", null, "Specialized Rockhopper", null, null, null, null,
                     DepartmentConfiguration.MechanicsId), default);
         }
 
         await using (var ctx = fixture.CreateContext())
         {
-            await new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx))
+            await new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new AssignMechanicCommand(jobId, mechanicId), default);
         }
 

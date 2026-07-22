@@ -2,6 +2,7 @@ using FluentAssertions;
 using ShiftLedger.Application.Common.Exceptions;
 using ShiftLedger.Application.Jobs;
 using ShiftLedger.Application.Users;
+using ShiftLedger.Domain.Entities;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
 using ShiftLedger.Infrastructure.Persistence.Configurations;
@@ -13,9 +14,22 @@ namespace ShiftLedger.Api.IntegrationTests.Jobs;
 [Collection("Database")]
 public class ServiceJobTests(IntegrationTestFixture fixture)
 {
-    private static async Task<Guid> CreateUserAsync(AppDbContext ctx, string email, Role role) =>
-        await new CreateUserCommandHandler(ctx, new PasswordHasher())
-            .Handle(new CreateUserCommand("Test User", email, "Secret#123", role, null), default);
+    // Rule RB1: the Super Admin is seeded once, never provisioned via CreateUserCommandHandler — a
+    // test "admin" is inserted directly, mirroring DbSeeder. Everyone else goes through the handler.
+    private static async Task<Guid> CreateUserAsync(AppDbContext ctx, string email, Role role)
+    {
+        if (role == Role.SuperAdmin)
+        {
+            var admin = new User { FullName = "Test Admin", Email = email, PasswordHash = "n/a", Role = Role.SuperAdmin };
+            ctx.Users.Add(admin);
+            await ctx.SaveChangesAsync();
+            return admin.Id;
+        }
+
+        var actingAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        return await new CreateUserCommandHandler(ctx, new PasswordHasher(), actingAdmin, TestDepartmentScope.For(actingAdmin))
+            .Handle(new CreateUserCommand("Test User", email, "Secret#123", role, DepartmentConfiguration.MechanicsId), default);
+    }
 
     private static CreateJobCommand NewJob(Guid? mechanicId = null) =>
         new("Brake service", "Squeaky front brake", "Trek FX 2", JobPriority.Medium, mechanicId, null, null,
@@ -34,11 +48,11 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         Guid jobId;
         await using (var ctx = fixture.CreateContext(TestCurrentUser.SuperAdmin(adminId)))
         {
-            jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx)).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid()))).Handle(NewJob(), default);
         }
 
         await using var verify = fixture.CreateContext();
-        var history = await new GetJobHistoryQueryHandler(verify).Handle(new GetJobHistoryQuery(jobId), default);
+        var history = await new GetJobHistoryQueryHandler(verify, TestCurrentUser.SuperAdmin(adminId)).Handle(new GetJobHistoryQuery(jobId), default);
         history.Should().ContainSingle(h => h.Action == "Created")
             .Which.ChangedById.Should().Be(adminId);
     }
@@ -51,7 +65,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p4-admin-flow@test.local", Role.SuperAdmin);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid()))).Handle(NewJob(), default);
         }
 
         var admin = TestCurrentUser.SuperAdmin(adminId);
@@ -83,19 +97,20 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         {
             adminId = await CreateUserAsync(setup, "p4-admin-assign@test.local", Role.SuperAdmin);
             mechanicId = await CreateUserAsync(setup, "p4-mech-assign@test.local", Role.Employee);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid()))).Handle(NewJob(), default);
         }
 
         await using (var ctx = fixture.CreateContext())
         {
-            var assignAdmin = () => new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx))
+            var assignAdmin = () => new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new AssignMechanicCommand(jobId, adminId), default);
             await assignAdmin.Should().ThrowAsync<BusinessRuleException>();
         }
 
         await using (var ctx = fixture.CreateContext())
         {
-            await new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx)).Handle(new AssignMechanicCommand(jobId, mechanicId), default);
+            await new AssignMechanicCommandHandler(ctx, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
+                .Handle(new AssignMechanicCommand(jobId, mechanicId), default);
         }
     }
 
@@ -108,20 +123,25 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         {
             mech1 = await CreateUserAsync(setup, "p4-mech1@test.local", Role.Employee);
             mech2 = await CreateUserAsync(setup, "p4-mech2@test.local", Role.Employee);
-            jobForMech1 = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(mech1), default);
+            jobForMech1 = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid()))).Handle(NewJob(mech1), default);
         }
 
         await using var verify = fixture.CreateContext();
 
-        var mech1Jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Employee(mech1))
+        // Both mechanics are in Mechanics (same as the job) — CreateUserAsync always provisions
+        // there — so the department check passes and the R2/R3 ownership check is what's on trial.
+        var mech1AsUser = TestCurrentUser.Employee(mech1, DepartmentConfiguration.MechanicsId);
+        var mech2AsUser = TestCurrentUser.Employee(mech2, DepartmentConfiguration.MechanicsId);
+
+        var mech1Jobs = await new GetJobsQueryHandler(verify, mech1AsUser)
             .Handle(new GetJobsQuery(null, null, 1, 100), default);
         mech1Jobs.Items.Should().Contain(j => j.Id == jobForMech1);
 
-        var mech2Jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.Employee(mech2))
+        var mech2Jobs = await new GetJobsQueryHandler(verify, mech2AsUser)
             .Handle(new GetJobsQuery(null, null, 1, 100), default);
         mech2Jobs.Items.Should().NotContain(j => j.Id == jobForMech1);
 
-        var openOthers = () => new GetJobQueryHandler(verify, TestCurrentUser.Employee(mech2))
+        var openOthers = () => new GetJobQueryHandler(verify, mech2AsUser)
             .Handle(new GetJobQuery(jobForMech1), default);
         await openOthers.Should().ThrowAsync<ForbiddenException>();
     }
@@ -134,8 +154,8 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p4-admin-del@test.local", Role.SuperAdmin);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
-            await new DeleteJobCommandHandler(setup).Handle(new DeleteJobCommand(jobId), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid()))).Handle(NewJob(), default);
+            await new DeleteJobCommandHandler(setup, TestCurrentUser.SuperAdmin(adminId)).Handle(new DeleteJobCommand(jobId), default);
         }
 
         await using var verify = fixture.CreateContext();
@@ -152,7 +172,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p7-admin-paging@test.local", Role.SuperAdmin);
-            var jobs = new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup));
+            var jobs = new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid())));
             for (var i = 0; i < 3; i++)
             {
                 await jobs.Handle(NewJob() with { Title = $"Paging job {i}" }, default);
@@ -177,7 +197,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         await using (var setup = fixture.CreateContext())
         {
             adminId = await CreateUserAsync(setup, "p4-admin-comment@test.local", Role.SuperAdmin);
-            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup)).Handle(NewJob(), default);
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(TestCurrentUser.SuperAdmin(Guid.NewGuid()))).Handle(NewJob(), default);
         }
 
         var admin = TestCurrentUser.SuperAdmin(adminId);
