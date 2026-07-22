@@ -16,10 +16,19 @@ public record BillDto(
 
 public record GetJobBillQuery(Guid ServiceJobId) : IRequest<BillDto>;
 
-public class GetJobBillQueryHandler(IAppDbContext db) : IRequestHandler<GetJobBillQuery, BillDto>
+public class GetJobBillQueryHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<GetJobBillQuery, BillDto>
 {
     public async Task<BillDto> Handle(GetJobBillQuery request, CancellationToken cancellationToken)
     {
+        // Rule RB3/RB4: confirm the job itself is reachable and in the caller's department before
+        // looking for its bill. SuperAdmin bypasses (RB0).
+        var job = await db.ServiceJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == request.ServiceJobId, cancellationToken)
+            ?? throw new NotFoundException("Service job not found.");
+        if (!currentUser.IsSuperAdmin && job.DepartmentId != currentUser.DepartmentId)
+        {
+            throw new NotFoundException("Service job not found.");
+        }
+
         var bill = await db.Bills.AsNoTracking()
                 .FirstOrDefaultAsync(b => b.ServiceJobId == request.ServiceJobId, cancellationToken)
             ?? throw new NotFoundException("This job has no bill yet.");

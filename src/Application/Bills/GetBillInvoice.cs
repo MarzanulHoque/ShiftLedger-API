@@ -27,8 +27,10 @@ public record GetBillInvoiceQuery(Guid BillId) : IRequest<InvoiceDto>;
 
 // An invoice is a snapshot of a Bill for handing to the customer — it must still render even if
 // the job was later (soft-)deleted, since the bill itself is an immutable financial record that
-// outlives the job's own lifecycle state. IgnoreQueryFilters() on the job lookup is deliberate.
-public class GetBillInvoiceQueryHandler(IAppDbContext db) : IRequestHandler<GetBillInvoiceQuery, InvoiceDto>
+// outlives the job's own lifecycle state. IgnoreQueryFilters() on the job lookup is deliberate, so
+// it also bypasses the soft-delete filter — the department check below (RB3/RB4) is explicit,
+// same as every other Bills handler now (ServiceJob carries no department query filter at all).
+public class GetBillInvoiceQueryHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<GetBillInvoiceQuery, InvoiceDto>
 {
     public async Task<InvoiceDto> Handle(GetBillInvoiceQuery request, CancellationToken cancellationToken)
     {
@@ -43,6 +45,13 @@ public class GetBillInvoiceQueryHandler(IAppDbContext db) : IRequestHandler<GetB
 
         var job = await db.ServiceJobs.AsNoTracking().IgnoreQueryFilters()
             .FirstOrDefaultAsync(j => j.Id == bill.ServiceJobId, cancellationToken);
+
+        // Rule RB3/RB4: the job row (even soft-deleted) still carries the real department — a
+        // DepartmentAdmin from another department must not be able to print this invoice.
+        if (job is not null && !currentUser.IsSuperAdmin && job.DepartmentId != currentUser.DepartmentId)
+        {
+            throw new NotFoundException("Bill not found.");
+        }
 
         string? mechanicName = null;
         if (job?.AssignedMechanicId is { } mechanicId)

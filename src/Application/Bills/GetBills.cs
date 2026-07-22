@@ -11,11 +11,21 @@ public record BillSummaryDto(Guid Id, int BillNumber, Guid ServiceJobId, bool Is
 public record GetBillsQuery(bool? IsPaid, int? Page = null, int? PageSize = null)
     : IRequest<PagedResult<BillSummaryDto>>;
 
-public class GetBillsQueryHandler(IAppDbContext db) : IRequestHandler<GetBillsQuery, PagedResult<BillSummaryDto>>
+public class GetBillsQueryHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<GetBillsQuery, PagedResult<BillSummaryDto>>
 {
     public async Task<PagedResult<BillSummaryDto>> Handle(GetBillsQuery request, CancellationToken cancellationToken)
     {
         var query = db.Bills.AsNoTracking();
+
+        // Rule RB3/RB4: Bill has no department of its own — scope by joining through ServiceJobs,
+        // explicitly filtered to the caller's department here (NOT via a global EF filter on
+        // ServiceJobs — see AppDbContext.OnModelCreating for why that pattern is unsafe).
+        if (!currentUser.IsSuperAdmin)
+        {
+            var scopedJobIds = db.ServiceJobs.Where(j => j.DepartmentId == currentUser.DepartmentId).Select(j => j.Id);
+            query = query.Where(b => scopedJobIds.Contains(b.ServiceJobId));
+        }
+
         if (request.IsPaid is { } isPaid)
         {
             query = query.Where(b => b.IsPaid == isPaid);

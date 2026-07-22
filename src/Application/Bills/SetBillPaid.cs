@@ -9,13 +9,15 @@ namespace ShiftLedger.Application.Bills;
 // Flipping back to unpaid ("reopen") clears the stamp and unlocks edits (Rule B3 correction path).
 public record SetBillPaidCommand(Guid BillId, bool IsPaid) : IRequest;
 
-public class SetBillPaidCommandHandler(IAppDbContext db, TimeProvider timeProvider, INotifier notifier)
+public class SetBillPaidCommandHandler(IAppDbContext db, TimeProvider timeProvider, INotifier notifier, ICurrentUser currentUser)
     : IRequestHandler<SetBillPaidCommand>
 {
     public async Task Handle(SetBillPaidCommand request, CancellationToken cancellationToken)
     {
         var bill = await db.Bills.FirstOrDefaultAsync(b => b.Id == request.BillId, cancellationToken)
             ?? throw new NotFoundException("Bill not found.");
+
+        await BillGuards.EnsureDepartmentAccessAsync(db, currentUser, bill.ServiceJobId, cancellationToken); // Rule RB3/RB4
 
         if (bill.IsPaid == request.IsPaid)
         {

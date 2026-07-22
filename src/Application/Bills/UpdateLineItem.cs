@@ -21,13 +21,14 @@ public class UpdateLineItemCommandValidator : AbstractValidator<UpdateLineItemCo
     }
 }
 
-public class UpdateLineItemCommandHandler(IAppDbContext db) : IRequestHandler<UpdateLineItemCommand>
+public class UpdateLineItemCommandHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<UpdateLineItemCommand>
 {
     public async Task Handle(UpdateLineItemCommand request, CancellationToken cancellationToken)
     {
         var bill = await db.Bills.AsNoTracking().FirstOrDefaultAsync(b => b.Id == request.BillId, cancellationToken)
             ?? throw new NotFoundException("Bill not found.");
 
+        await BillGuards.EnsureDepartmentAccessAsync(db, currentUser, bill.ServiceJobId, cancellationToken); // Rule RB3/RB4
         BillGuards.EnsureEditable(bill); // Rule B3
 
         var line = await db.BillLineItems
