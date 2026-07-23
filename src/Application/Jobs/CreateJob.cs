@@ -64,6 +64,11 @@ public class CreateJobCommandHandler(IAppDbContext db, TimeProvider timeProvider
         {
             await notifier.NotifyAsync(assignee, "JobAssigned", $"New job assigned to you: {job.Title}", cancellationToken);
         }
+
+        // Rule N2: job-lifecycle event — the acting department's admin(s) and the org-wide
+        // SuperAdmin cockpit.
+        await notifier.NotifyDepartmentAsync(job.DepartmentId, "JobCreated", $"New job created: {job.Title}", cancellationToken);
+
         return job.Id;
     }
 

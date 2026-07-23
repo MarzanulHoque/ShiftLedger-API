@@ -8,6 +8,12 @@ namespace ShiftLedger.Application.Common.Interfaces;
 public interface INotifier
 {
     Task NotifyAsync(Guid recipientId, string type, string message, CancellationToken cancellationToken);
+
+    // Rules N1/N2/N3: a department-wide event (bill paid, job created/completed/delivered,
+    // overdue/unpaid alert) — persists one row per relevant recipient (the SuperAdmin plus that
+    // department's DepartmentAdmin(s)) and pushes live to the department's group and the org-wide
+    // group, so a SuperAdmin sees every department while a DepartmentAdmin sees only their own.
+    Task NotifyDepartmentAsync(Guid departmentId, string type, string message, CancellationToken cancellationToken);
 }
 
 // The real-time leg only (SignalR in the API layer). Split from INotifier so the Application
@@ -15,4 +21,5 @@ public interface INotifier
 public interface IRealtimePusher
 {
     Task PushAsync(Guid recipientId, NotificationDto notification, CancellationToken cancellationToken);
+    Task PushToDepartmentAsync(Guid departmentId, NotificationDto notification, CancellationToken cancellationToken);
 }

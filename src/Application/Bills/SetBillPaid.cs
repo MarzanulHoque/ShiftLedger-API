@@ -37,11 +37,19 @@ public class SetBillPaidCommandHandler(IAppDbContext db, TimeProvider timeProvid
         {
             var job = await db.ServiceJobs.AsNoTracking()
                 .Where(j => j.Id == bill.ServiceJobId)
-                .Select(j => new { j.Title, j.AssignedMechanicId })
+                .Select(j => new { j.Title, j.AssignedMechanicId, j.DepartmentId })
                 .FirstOrDefaultAsync(cancellationToken);
             if (job?.AssignedMechanicId is { } mechanic)
             {
                 await notifier.NotifyAsync(mechanic, "BillPaid",
+                    $"Bill for job '{job.Title}' was marked paid.", cancellationToken);
+            }
+
+            // Rule N1: revenue event — the acting department's admin(s) and the org-wide
+            // SuperAdmin cockpit, regardless of whether the job has an assigned mechanic.
+            if (job is not null)
+            {
+                await notifier.NotifyDepartmentAsync(job.DepartmentId, "BillPaid",
                     $"Bill for job '{job.Title}' was marked paid.", cancellationToken);
             }
         }

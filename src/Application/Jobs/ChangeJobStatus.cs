@@ -45,5 +45,14 @@ public class ChangeJobStatusCommandHandler(IAppDbContext db, ICurrentUser curren
             await notifier.NotifyAsync(mechanic, "JobStatusChanged",
                 $"Job '{job.Title}' moved to {request.NewStatus}.", cancellationToken);
         }
+
+        // Rule N2: job-lifecycle event for Completed/Delivered — the acting department's admin(s)
+        // and the org-wide SuperAdmin cockpit. Received/InProgress are routine board activity, not
+        // milestones worth a cross-department alert.
+        if (request.NewStatus is JobStatus.Completed or JobStatus.Delivered)
+        {
+            await notifier.NotifyDepartmentAsync(job.DepartmentId, "JobStatusChanged",
+                $"Job '{job.Title}' moved to {request.NewStatus}.", cancellationToken);
+        }
     }
 }

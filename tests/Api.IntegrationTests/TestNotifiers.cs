@@ -16,5 +16,8 @@ public static class TestNotifiers
     {
         public Task PushAsync(Guid recipientId, NotificationDto notification, CancellationToken cancellationToken)
             => Task.CompletedTask;
+
+        public Task PushToDepartmentAsync(Guid departmentId, NotificationDto notification, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 }

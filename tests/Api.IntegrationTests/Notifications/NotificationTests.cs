@@ -1,8 +1,11 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using ShiftLedger.Application.Bills;
 using ShiftLedger.Application.Common.Exceptions;
 using ShiftLedger.Application.Jobs;
 using ShiftLedger.Application.Notifications;
 using ShiftLedger.Application.Users;
+using ShiftLedger.Domain.Entities;
 using ShiftLedger.Domain.Enums;
 using ShiftLedger.Infrastructure.Persistence;
 using ShiftLedger.Infrastructure.Persistence.Configurations;
@@ -19,6 +22,28 @@ public class NotificationTests(IntegrationTestFixture fixture)
         var admin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
         return await new CreateUserCommandHandler(ctx, new PasswordHasher(), admin, TestDepartmentScope.For(admin))
             .Handle(new CreateUserCommand("Test User", email, "Secret#123", role, DepartmentConfiguration.MechanicsId), default);
+    }
+
+    // CreateUserCommandHandler forbids provisioning a SuperAdmin (Rule RB1 — it's seeded once at
+    // startup), so NotifyDepartmentAsync's fan-out target is inserted directly here, same as
+    // DbSeeder does for the real bootstrap account.
+    private static async Task<Guid> CreateSuperAdminAsync(AppDbContext ctx, string email)
+    {
+        var user = new User
+        {
+            FullName = "Test Super Admin", Email = email, PasswordHash = "unused",
+            Role = Role.SuperAdmin, DepartmentId = null, IsActive = true,
+        };
+        ctx.Users.Add(user);
+        await ctx.SaveChangesAsync();
+        return user.Id;
+    }
+
+    private static async Task<Guid> CreateDepartmentAdminAsync(AppDbContext ctx, string email, Guid departmentId)
+    {
+        var admin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        return await new CreateUserCommandHandler(ctx, new PasswordHasher(), admin, TestDepartmentScope.For(admin))
+            .Handle(new CreateUserCommand("Test Dept Admin", email, "Secret#123", Role.DepartmentAdmin, departmentId), default);
     }
 
     // Assigning a job persists a JobAssigned notification for the mechanic — and only for them.
@@ -84,5 +109,111 @@ public class NotificationTests(IntegrationTestFixture fixture)
         var unread = await new GetNotificationsQueryHandler(verify, TestCurrentUser.Employee(mechanicId))
             .Handle(new GetNotificationsQuery(UnreadOnly: true), default);
         unread.Items.Should().NotContain(n => n.Id == notificationId);
+    }
+
+    // Rule N2: a job created in one department notifies the SuperAdmin and that department's own
+    // admin — never the other department's admin (dept isolation holds for the cockpit feed too).
+    [Fact]
+    public async Task CreateJob_NotifiesSuperAdminAndOwnDepartmentAdmin_NotOtherDepartment_N2()
+    {
+        Guid superAdminId, mechanicsAdminId, washAdminId;
+        await using (var setup = fixture.CreateContext())
+        {
+            superAdminId = await CreateSuperAdminAsync(setup, "n2-super@test.local");
+            mechanicsAdminId = await CreateDepartmentAdminAsync(setup, "n2-mech-admin@test.local", DepartmentConfiguration.MechanicsId);
+            washAdminId = await CreateDepartmentAdminAsync(setup, "n2-wash-admin@test.local", DepartmentConfiguration.BikeWashId);
+        }
+
+        var scopeAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        await using (var ctx = fixture.CreateContext(scopeAdmin))
+        {
+            await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(scopeAdmin))
+                .Handle(new CreateJobCommand("N2 test job", null, "Test bike", null, null, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.SuperAdmin(superAdminId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().Contain(n => n.Type == "JobCreated");
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.DepartmentAdmin(mechanicsAdminId, DepartmentConfiguration.MechanicsId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().Contain(n => n.Type == "JobCreated");
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.DepartmentAdmin(washAdminId, DepartmentConfiguration.BikeWashId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().NotContain(n => n.Type == "JobCreated");
+    }
+
+    // Rule N1: a bill marked Paid in one department notifies the SuperAdmin and that department's
+    // own admin only.
+    [Fact]
+    public async Task SetBillPaid_NotifiesSuperAdminAndOwnDepartmentAdmin_NotOtherDepartment_N1()
+    {
+        Guid superAdminId, mechanicsAdminId, washAdminId, billId;
+        await using (var setup = fixture.CreateContext())
+        {
+            superAdminId = await CreateSuperAdminAsync(setup, "n1-super@test.local");
+            mechanicsAdminId = await CreateDepartmentAdminAsync(setup, "n1-mech-admin@test.local", DepartmentConfiguration.MechanicsId);
+            washAdminId = await CreateDepartmentAdminAsync(setup, "n1-wash-admin@test.local", DepartmentConfiguration.BikeWashId);
+
+            var scopeAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            var jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(scopeAdmin))
+                .Handle(new CreateJobCommand("N1 test job", null, "Test bike", null, null, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
+            billId = await new CreateBillCommandHandler(setup, scopeAdmin, TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
+            await new AddLineItemCommandHandler(setup, scopeAdmin)
+                .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Service", 1m, 100m), default);
+        }
+
+        await using (var ctx = fixture.CreateContext())
+        {
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestCurrentUser.SuperAdmin(Guid.NewGuid()))
+                .Handle(new SetBillPaidCommand(billId, true), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.SuperAdmin(superAdminId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().Contain(n => n.Type == "BillPaid");
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.DepartmentAdmin(mechanicsAdminId, DepartmentConfiguration.MechanicsId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().Contain(n => n.Type == "BillPaid");
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.DepartmentAdmin(washAdminId, DepartmentConfiguration.BikeWashId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().NotContain(n => n.Type == "BillPaid");
+    }
+
+    // Rule N2: only the Completed/Delivered milestones raise a department notification —
+    // Received→InProgress is routine board activity, not worth a cross-department alert.
+    [Fact]
+    public async Task ChangeJobStatus_OnlyNotifiesDepartmentOnMilestoneStatuses_N2()
+    {
+        Guid superAdminId, jobId;
+        await using (var setup = fixture.CreateContext())
+        {
+            superAdminId = await CreateSuperAdminAsync(setup, "n2-milestone-super@test.local");
+            var scopeAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            jobId = await new CreateJobCommandHandler(setup, TimeProvider.System, TestNotifiers.For(setup), TestDepartmentScope.For(scopeAdmin))
+                .Handle(new CreateJobCommand("N2 milestone job", null, "Test bike", null, null, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
+        }
+
+        var superAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        await using (var ctx = fixture.CreateContext(superAdmin))
+        {
+            await new ChangeJobStatusCommandHandler(ctx, superAdmin, TestNotifiers.For(ctx))
+                .Handle(new ChangeJobStatusCommand(jobId, JobStatus.InProgress), default);
+        }
+
+        await using (var afterInProgress = fixture.CreateContext())
+        {
+            var mine = await new GetNotificationsQueryHandler(afterInProgress, TestCurrentUser.SuperAdmin(superAdminId))
+                .Handle(new GetNotificationsQuery(), default);
+            mine.Items.Should().NotContain(n => n.Type == "JobStatusChanged");
+        }
+
+        await using (var ctx = fixture.CreateContext(superAdmin))
+        {
+            await new ChangeJobStatusCommandHandler(ctx, superAdmin, TestNotifiers.For(ctx))
+                .Handle(new ChangeJobStatusCommand(jobId, JobStatus.Completed), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        (await new GetNotificationsQueryHandler(verify, TestCurrentUser.SuperAdmin(superAdminId))
+            .Handle(new GetNotificationsQuery(), default)).Items.Should().Contain(n => n.Type == "JobStatusChanged");
     }
 }

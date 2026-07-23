@@ -121,10 +121,9 @@ else
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-// Notifications hub unplugged for now, per request — client no longer connects either.
-// INotifier/IRealtimePusher stay registered (handlers depend on them via DI); this just
-// means the route doesn't exist, so any push has zero connected clients to reach.
-// Uncomment to re-enable live notifications: app.MapHub<ShiftLedger.Api.Realtime.NotificationsHub>("/hubs/notifications");
+// Re-enabled for P11: connections join the org-wide or their department's group on connect
+// (NotificationsHub.OnConnectedAsync), backing the SuperAdmin cockpit's cross-department feed.
+app.MapHub<ShiftLedger.Api.Realtime.NotificationsHub>("/hubs/notifications");
 
 // In Development also seed demo accounts (admin + two employees) for the quick-login buttons.
 await DbSeeder.SeedAsync(app.Services, seedDemoData: app.Environment.IsDevelopment());
