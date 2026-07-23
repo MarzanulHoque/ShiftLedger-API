@@ -17,8 +17,12 @@ public class BillsController(ISender mediator, IInvoiceExporter invoiceExporter)
 {
     [HttpGet("bills")]
     public async Task<ActionResult<PagedResult<BillSummaryDto>>> Get(
-        [FromQuery] bool? isPaid, [FromQuery] int? page, [FromQuery] int? pageSize)
-        => Ok(await mediator.Send(new GetBillsQuery(isPaid, page, pageSize)));
+        [FromQuery] bool? isPaid, [FromQuery] Guid? departmentId, [FromQuery] int? page, [FromQuery] int? pageSize)
+        => Ok(await mediator.Send(new GetBillsQuery(isPaid, departmentId, page, pageSize)));
+
+    [HttpGet("bills/department-summary")]
+    public async Task<ActionResult<IReadOnlyList<DepartmentBillingSummaryDto>>> GetDepartmentSummary()
+        => Ok(await mediator.Send(new GetBillingSummaryQuery()));
 
     [HttpGet("jobs/{jobId:guid}/bill")]
     public async Task<ActionResult<BillDto>> GetForJob(Guid jobId)

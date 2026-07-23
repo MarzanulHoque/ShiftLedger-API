@@ -146,10 +146,62 @@ public class DepartmentIsolationTests(IntegrationTestFixture fixture)
 
         var deptAdmin = TestCurrentUser.DepartmentAdmin(Guid.NewGuid(), DepartmentConfiguration.MechanicsId);
         await using var ctx = fixture.CreateContext(deptAdmin);
-        var bills = await new GetBillsQueryHandler(ctx, deptAdmin).Handle(new GetBillsQuery(null, 1, 100), default);
+        var bills = await new GetBillsQueryHandler(ctx, deptAdmin).Handle(new GetBillsQuery(null, null, 1, 100), default);
 
         bills.Items.Should().Contain(b => b.Id == mechanicsBillId);
         bills.Items.Should().NotContain(b => b.Id == washBillId);
+    }
+
+    // Rule BL2: an explicit department filter on GetBills works for a SuperAdmin (narrowing the
+    // consolidated list) and is a no-op for a DepartmentAdmin who is already scoped to it.
+    [Fact]
+    public async Task GetBills_DepartmentFilter_NarrowsConsolidatedList_BL2()
+    {
+        Guid mechanicsBillId, washBillId;
+        await using (var setup = fixture.CreateContext())
+        {
+            var mechanicsJobId = await CreateJobAsync(setup, DepartmentConfiguration.MechanicsId);
+            var washJobId = await CreateJobAsync(setup, DepartmentConfiguration.BikeWashId);
+            var setupAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(mechanicsJobId), default);
+            washBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(washJobId), default);
+        }
+
+        var superAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        await using var ctx = fixture.CreateContext(superAdmin);
+        var filtered = await new GetBillsQueryHandler(ctx, superAdmin)
+            .Handle(new GetBillsQuery(null, DepartmentConfiguration.MechanicsId, 1, 100), default);
+
+        filtered.Items.Should().Contain(b => b.Id == mechanicsBillId);
+        filtered.Items.Should().NotContain(b => b.Id == washBillId);
+    }
+
+    // Rule BL2/C2: the SuperAdmin's consolidated total across all bills must equal the sum of the
+    // per-department roll-up rows — computed independently here so the test would actually catch drift.
+    [Fact]
+    public async Task GetBillingSummary_ConsolidatedTotal_MatchesSumOfPerDepartmentTotals_BL2()
+    {
+        await using (var setup = fixture.CreateContext())
+        {
+            var setupAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+            var mechanicsJobId = await CreateJobAsync(setup, DepartmentConfiguration.MechanicsId);
+            var washJobId = await CreateJobAsync(setup, DepartmentConfiguration.BikeWashId);
+            var mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(mechanicsJobId), default);
+            var washBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(washJobId), default);
+            await new AddLineItemCommandHandler(setup, setupAdmin)
+                .Handle(new AddLineItemCommand(mechanicsBillId, LineItemType.Labor, "Tune-up", 1m, 400m), default);
+            await new AddLineItemCommandHandler(setup, setupAdmin)
+                .Handle(new AddLineItemCommand(washBillId, LineItemType.Part, "Wash kit", 2m, 25m), default);
+        }
+
+        var superAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        await using var ctx = fixture.CreateContext(superAdmin);
+
+        var summary = await new GetBillingSummaryQueryHandler(ctx, superAdmin).Handle(new GetBillingSummaryQuery(), default);
+        var consolidated = await new GetBillsQueryHandler(ctx, superAdmin).Handle(new GetBillsQuery(null, null, 1, 1000), default);
+
+        summary.Sum(d => d.GrandTotal).Should().Be(consolidated.Items.Sum(b => b.Total));
+        summary.Sum(d => d.TotalCount).Should().Be(consolidated.Items.Count);
     }
 
     // Rule B3 + RB0: the paid-bill edit lock holds even for the Super Admin — RB0's bypass never

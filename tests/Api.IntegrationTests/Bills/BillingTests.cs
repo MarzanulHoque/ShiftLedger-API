@@ -173,11 +173,11 @@ public class BillingTests(IntegrationTestFixture fixture)
 
         await using var verify = fixture.CreateContext();
 
-        var unpaid = await new GetBillsQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetBillsQuery(false, 1, 100), default);
+        var unpaid = await new GetBillsQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetBillsQuery(false, null, 1, 100), default);
         unpaid.Items.Should().Contain(b => b.Id == unpaidBillId && b.Total == 350m);
         unpaid.Items.Should().NotContain(b => b.Id == paidBillId);
 
-        var paid = await new GetBillsQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetBillsQuery(true, 1, 100), default);
+        var paid = await new GetBillsQueryHandler(verify, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new GetBillsQuery(true, null, 1, 100), default);
         paid.Items.Should().Contain(b => b.Id == paidBillId && b.Total == 200m);
     }
 }
