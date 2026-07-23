@@ -24,7 +24,9 @@ public record ReportData(string Title, IReadOnlyList<string> Columns, IReadOnlyL
 public record GetReportQuery(ReportType Type, DateOnly? From, DateOnly? To, Guid? MechanicId, JobStatus? Status)
     : IRequest<ReportData>;
 
-public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReportQuery, ReportData>
+// Rule RB3/RB4: every report is scoped to the caller's own department; SuperAdmin sees the
+// org-wide view (RB0) — same explicit-check pattern as every other P9/P10/P12 handler.
+public class GetReportQueryHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<GetReportQuery, ReportData>
 {
     public async Task<ReportData> Handle(GetReportQuery request, CancellationToken ct) => request.Type switch
     {
@@ -39,6 +41,7 @@ public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReport
     private async Task<ReportData> JobsReportAsync(GetReportQuery request, CancellationToken ct)
     {
         var query = db.ServiceJobs.AsNoTracking();
+        if (!currentUser.IsSuperAdmin) query = query.Where(j => j.DepartmentId == currentUser.DepartmentId);
         if (request.From is { } from) query = query.Where(j => j.ReceivedDate >= from);
         if (request.To is { } to) query = query.Where(j => j.ReceivedDate <= to);
         if (request.Status is { } status) query = query.Where(j => j.Status == status);
@@ -60,15 +63,20 @@ public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReport
     {
         // Per-bill (paid date, total), then grouped per calendar day in memory (report volumes are
         // small and reads are live — the deliberate v1 tradeoff in docs/01 NFRs).
-        var query = db.Bills.AsNoTracking().Where(b => b.IsPaid && b.PaidAtUtc != null);
-        if (request.From is { } from) query = query.Where(b => b.PaidAtUtc >= from.ToDateTime(TimeOnly.MinValue));
-        if (request.To is { } to) query = query.Where(b => b.PaidAtUtc < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
+        var query =
+            from b in db.Bills.AsNoTracking()
+            join j in db.ServiceJobs.AsNoTracking() on b.ServiceJobId equals j.Id
+            where b.IsPaid && b.PaidAtUtc != null
+            select new { Bill = b, j.DepartmentId };
+        if (!currentUser.IsSuperAdmin) query = query.Where(x => x.DepartmentId == currentUser.DepartmentId);
+        if (request.From is { } from) query = query.Where(x => x.Bill.PaidAtUtc >= from.ToDateTime(TimeOnly.MinValue));
+        if (request.To is { } to) query = query.Where(x => x.Bill.PaidAtUtc < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
 
         var paid = await query
-            .Select(b => new
+            .Select(x => new
             {
-                b.PaidAtUtc,
-                Total = db.BillLineItems.Where(l => l.BillId == b.Id)
+                x.Bill.PaidAtUtc,
+                Total = db.BillLineItems.Where(l => l.BillId == x.Bill.Id)
                     .Sum(l => (decimal?)Math.Round(l.Quantity * l.UnitPrice, 2)) ?? 0m,
             })
             .ToListAsync(ct);
@@ -84,7 +92,7 @@ public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReport
 
     private async Task<ReportData> UnpaidBillsReportAsync(CancellationToken ct)
     {
-        var rows = await db.Bills.AsNoTracking()
+        var query = db.Bills.AsNoTracking()
             .Where(b => !b.IsPaid)
             .Join(db.ServiceJobs, b => b.ServiceJobId, j => j.Id,
                 (b, j) => new
@@ -92,11 +100,13 @@ public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReport
                     j.Title,
                     j.BikeModel,
                     j.ReceivedDate,
+                    j.DepartmentId,
                     Total = db.BillLineItems.Where(l => l.BillId == b.Id)
                         .Sum(l => (decimal?)Math.Round(l.Quantity * l.UnitPrice, 2)) ?? 0m,
-                })
-            .OrderBy(r => r.ReceivedDate)
-            .ToListAsync(ct);
+                });
+        if (!currentUser.IsSuperAdmin) query = query.Where(r => r.DepartmentId == currentUser.DepartmentId);
+
+        var rows = await query.OrderBy(r => r.ReceivedDate).ToListAsync(ct);
 
         return new ReportData("Unpaid bills",
             ["Job", "Bike model", "Received", "Outstanding"],
@@ -108,6 +118,7 @@ public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReport
         // Anchored on the job's ReceivedDate — a stable calendar date every bill has, paid or not.
         var query = db.Bills.AsNoTracking()
             .Join(db.ServiceJobs, b => b.ServiceJobId, j => j.Id, (b, j) => new { Bill = b, Job = j });
+        if (!currentUser.IsSuperAdmin) query = query.Where(x => x.Job.DepartmentId == currentUser.DepartmentId);
         if (request.From is { } from) query = query.Where(x => x.Job.ReceivedDate >= from);
         if (request.To is { } to) query = query.Where(x => x.Job.ReceivedDate <= to);
 
@@ -136,6 +147,7 @@ public class GetReportQueryHandler(IAppDbContext db) : IRequestHandler<GetReport
     {
         // Jobs received in the range, bucketed per mechanic by their current status.
         var query = db.ServiceJobs.AsNoTracking().Where(j => j.AssignedMechanicId != null);
+        if (!currentUser.IsSuperAdmin) query = query.Where(j => j.DepartmentId == currentUser.DepartmentId);
         if (request.From is { } from) query = query.Where(j => j.ReceivedDate >= from);
         if (request.To is { } to) query = query.Where(j => j.ReceivedDate <= to);
 

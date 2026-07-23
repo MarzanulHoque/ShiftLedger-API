@@ -34,7 +34,7 @@ public class ReportTests(IntegrationTestFixture fixture)
     {
         await using var ctx = fixture.CreateContext();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var report = await new GetReportQueryHandler(ctx)
+        var report = await new GetReportQueryHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new GetReportQuery(ReportType.Revenue, today, today, null, null), default);
         // Columns: Date | Bills paid | Revenue
         return report.Rows.Sum(r => (decimal)r[2]!);
@@ -63,7 +63,7 @@ public class ReportTests(IntegrationTestFixture fixture)
         await CreateBilledJobAsync(paidTitle, 250m, paid: true);
 
         await using var ctx = fixture.CreateContext();
-        var report = await new GetReportQueryHandler(ctx)
+        var report = await new GetReportQueryHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new GetReportQuery(ReportType.UnpaidBills, null, null, null, null), default);
 
         var jobTitles = report.Rows.Select(r => (string?)r[0]).ToList();
@@ -79,7 +79,7 @@ public class ReportTests(IntegrationTestFixture fixture)
         await CreateBilledJobAsync(title, 100m, paid: false); // status = Received
 
         await using var ctx = fixture.CreateContext();
-        var handler = new GetReportQueryHandler(ctx);
+        var handler = new GetReportQueryHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()));
 
         var received = await handler.Handle(
             new GetReportQuery(ReportType.Jobs, null, null, null, JobStatus.Received), default);

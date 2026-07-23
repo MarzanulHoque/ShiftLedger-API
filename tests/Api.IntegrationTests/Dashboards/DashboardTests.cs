@@ -22,7 +22,7 @@ public class DashboardTests(IntegrationTestFixture fixture)
         AdminDashboardDto before;
         await using (var ctx = fixture.CreateContext())
         {
-            before = await new GetAdminDashboardQueryHandler(ctx, TimeProvider.System)
+            before = await new GetAdminDashboardQueryHandler(ctx, TimeProvider.System, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
                 .Handle(new GetAdminDashboardQuery(null), default);
         }
 
@@ -40,12 +40,66 @@ public class DashboardTests(IntegrationTestFixture fixture)
         }
 
         await using var verify = fixture.CreateContext();
-        var after = await new GetAdminDashboardQueryHandler(verify, TimeProvider.System)
+        var after = await new GetAdminDashboardQueryHandler(verify, TimeProvider.System, TestCurrentUser.SuperAdmin(Guid.NewGuid()))
             .Handle(new GetAdminDashboardQuery(null), default);
 
         after.JobsReceivedToday.Should().Be(before.JobsReceivedToday + 1);
         after.BillsPaidToday.Should().Be(before.BillsPaidToday + 1);
         after.RevenueToday.Should().Be(before.RevenueToday + 777m);
+    }
+
+    // Rule RB3/RB4 (P12): a DepartmentAdmin's dashboard only ever reflects their own department —
+    // asserted as before/after deltas (like the C3 test above) so this isn't thrown off by other
+    // tests sharing the same day's data; the delta itself proves the Bike Wash bill didn't leak in.
+    [Fact]
+    public async Task AdminDashboard_DepartmentAdmin_SeesOnlyOwnDepartment_RB3()
+    {
+        var superAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+        var deptAdmin = TestCurrentUser.DepartmentAdmin(Guid.NewGuid(), DepartmentConfiguration.MechanicsId);
+
+        AdminDashboardDto before;
+        await using (var ctx = fixture.CreateContext())
+        {
+            before = await new GetAdminDashboardQueryHandler(ctx, TimeProvider.System, deptAdmin)
+                .Handle(new GetAdminDashboardQuery(null), default);
+        }
+
+        Guid mechanicsMechanicId;
+        await using (var ctx = fixture.CreateContext())
+        {
+            mechanicsMechanicId = await new CreateUserCommandHandler(ctx, new PasswordHasher(), superAdmin, TestDepartmentScope.For(superAdmin))
+                .Handle(new CreateUserCommand("Dash Dept Mech", $"p12-dash-mech-{Guid.NewGuid()}@test.local", "Secret#123",
+                    Role.Employee, DepartmentConfiguration.MechanicsId), default);
+
+            var jobs = new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(superAdmin));
+            var mechanicsJobId = await jobs.Handle(
+                new CreateJobCommand($"P12 mechanics job {Guid.NewGuid()}", null, "Test bike", null, mechanicsMechanicId, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
+            var washJobId = await jobs.Handle(
+                new CreateJobCommand($"P12 wash job {Guid.NewGuid()}", null, "Test bike", null, null, null, null,
+                    DepartmentConfiguration.BikeWashId), default);
+
+            var mechanicsBillId = await new CreateBillCommandHandler(ctx, superAdmin, TimeProvider.System).Handle(new CreateBillCommand(mechanicsJobId), default);
+            await new AddLineItemCommandHandler(ctx, superAdmin)
+                .Handle(new AddLineItemCommand(mechanicsBillId, LineItemType.Labor, "Mechanics work", 1m, 500m), default);
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), superAdmin)
+                .Handle(new SetBillPaidCommand(mechanicsBillId, true), default);
+
+            var washBillId = await new CreateBillCommandHandler(ctx, superAdmin, TimeProvider.System).Handle(new CreateBillCommand(washJobId), default);
+            await new AddLineItemCommandHandler(ctx, superAdmin)
+                .Handle(new AddLineItemCommand(washBillId, LineItemType.Labor, "Wash work", 1m, 300m), default);
+            await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), superAdmin)
+                .Handle(new SetBillPaidCommand(washBillId, true), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var after = await new GetAdminDashboardQueryHandler(verify, TimeProvider.System, deptAdmin)
+            .Handle(new GetAdminDashboardQuery(null), default);
+
+        // Only the Mechanics-department bill (500) counts — the 300 Bike Wash bill must not leak in.
+        (after.RevenueToday - before.RevenueToday).Should().Be(500m);
+        (after.BillsPaidToday - before.BillsPaidToday).Should().Be(1);
+        after.MechanicWorkload.Should().Contain(w => w.MechanicId == mechanicsMechanicId);
     }
 
     // Rule R2: /dashboard/me only ever contains the caller's own jobs.

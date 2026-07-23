@@ -22,7 +22,10 @@ public record AdminDashboardDto(
 
 public record GetAdminDashboardQuery(DateOnly? Date) : IRequest<AdminDashboardDto>;
 
-public class GetAdminDashboardQueryHandler(IAppDbContext db, TimeProvider timeProvider)
+// Rule RB3/RB4: a DepartmentAdmin's dashboard is scoped to their own department; SuperAdmin sees
+// the org-wide consolidated view (RB0) — same explicit-check pattern as every other P9/P10 handler
+// (no global EF filter — see AppDbContext.OnModelCreating for why that pattern is unsafe).
+public class GetAdminDashboardQueryHandler(IAppDbContext db, TimeProvider timeProvider, ICurrentUser currentUser)
     : IRequestHandler<GetAdminDashboardQuery, AdminDashboardDto>
 {
     public async Task<AdminDashboardDto> Handle(GetAdminDashboardQuery request, CancellationToken cancellationToken)
@@ -31,15 +34,21 @@ public class GetAdminDashboardQueryHandler(IAppDbContext db, TimeProvider timePr
         var dayStartUtc = today.ToDateTime(TimeOnly.MinValue);
         var dayEndUtc = dayStartUtc.AddDays(1);
 
-        var jobsReceivedToday = await db.ServiceJobs.CountAsync(j => j.ReceivedDate == today, cancellationToken);
+        var jobs = db.ServiceJobs.AsNoTracking();
+        if (!currentUser.IsSuperAdmin)
+        {
+            jobs = jobs.Where(j => j.DepartmentId == currentUser.DepartmentId);
+        }
 
-        var jobsByStatus = await db.ServiceJobs
+        var jobsReceivedToday = await jobs.CountAsync(j => j.ReceivedDate == today, cancellationToken);
+
+        var jobsByStatus = await jobs
             .GroupBy(j => j.Status)
             .Select(g => new StatusCountDto(g.Key, g.Count()))
             .ToListAsync(cancellationToken);
 
         // Open workload per mechanic (Delivered = out the door, no longer workload).
-        var workloadCounts = await db.ServiceJobs
+        var workloadCounts = await jobs
             .Where(j => j.AssignedMechanicId != null && j.Status != JobStatus.Delivered)
             .GroupBy(j => j.AssignedMechanicId!.Value)
             .Select(g => new { MechanicId = g.Key, OpenJobs = g.Count() })
@@ -53,17 +62,31 @@ public class GetAdminDashboardQueryHandler(IAppDbContext db, TimeProvider timePr
             .OrderByDescending(w => w.OpenJobs)
             .ToList();
 
-        var unpaidBills = await db.Bills.CountAsync(b => !b.IsPaid, cancellationToken);
-        var unpaidTotal = await db.BillLineItems
-            .Where(l => db.Bills.Any(b => b.Id == l.BillId && !b.IsPaid))
-            .SumAsync(l => (decimal?)Math.Round(l.Quantity * l.UnitPrice, 2), cancellationToken) ?? 0m;
+        // Rule RB3/RB4: Bill has no department of its own — scope via an explicit join through
+        // ServiceJobs, matching GetBills/GetBillingSummary (not a global EF filter).
+        var bills =
+            from b in db.Bills.AsNoTracking()
+            join j in db.ServiceJobs.AsNoTracking() on b.ServiceJobId equals j.Id
+            select new { Bill = b, j.DepartmentId };
+        if (!currentUser.IsSuperAdmin)
+        {
+            bills = bills.Where(x => x.DepartmentId == currentUser.DepartmentId);
+        }
 
-        var billsPaidToday = await db.Bills
-            .CountAsync(b => b.IsPaid && b.PaidAtUtc >= dayStartUtc && b.PaidAtUtc < dayEndUtc, cancellationToken);
-        var revenueToday = await db.BillLineItems
-            .Where(l => db.Bills.Any(b =>
-                b.Id == l.BillId && b.IsPaid && b.PaidAtUtc >= dayStartUtc && b.PaidAtUtc < dayEndUtc))
-            .SumAsync(l => (decimal?)Math.Round(l.Quantity * l.UnitPrice, 2), cancellationToken) ?? 0m;
+        var unpaidBills = await bills.CountAsync(x => !x.Bill.IsPaid, cancellationToken);
+        var unpaidTotal = await bills
+            .Where(x => !x.Bill.IsPaid)
+            .Select(x => db.BillLineItems.Where(l => l.BillId == x.Bill.Id)
+                .Sum(l => (decimal?)Math.Round(l.Quantity * l.UnitPrice, 2)) ?? 0m)
+            .SumAsync(cancellationToken);
+
+        var billsPaidToday = await bills
+            .CountAsync(x => x.Bill.IsPaid && x.Bill.PaidAtUtc >= dayStartUtc && x.Bill.PaidAtUtc < dayEndUtc, cancellationToken);
+        var revenueToday = await bills
+            .Where(x => x.Bill.IsPaid && x.Bill.PaidAtUtc >= dayStartUtc && x.Bill.PaidAtUtc < dayEndUtc)
+            .Select(x => db.BillLineItems.Where(l => l.BillId == x.Bill.Id)
+                .Sum(l => (decimal?)Math.Round(l.Quantity * l.UnitPrice, 2)) ?? 0m)
+            .SumAsync(cancellationToken);
 
         return new AdminDashboardDto(
             today, jobsReceivedToday, jobsByStatus, workload,
