@@ -38,6 +38,9 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.INotifier, ShiftLedger.Application.Notifications.Notifier>();
 builder.Services.AddScoped<ShiftLedger.Application.Common.Interfaces.IRealtimePusher, ShiftLedger.Api.Realtime.SignalRPusher>();
 
+// Rule N3 (P11): periodic overdue-job/unpaid-bill alert sweep — no scheduler in v1 (Hangfire deferred).
+builder.Services.AddHostedService<ShiftLedger.Api.BackgroundServices.OverdueUnpaidAlertHostedService>();
+
 // Report downloads (P6): PDF via QuestPDF, Excel via ClosedXML.
 builder.Services.AddSingleton<ShiftLedger.Application.Common.Interfaces.IReportExporter, ShiftLedger.Infrastructure.Reports.ReportExporter>();
 
