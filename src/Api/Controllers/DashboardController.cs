@@ -15,6 +15,12 @@ public class DashboardController(ISender mediator) : ControllerBase
     public async Task<ActionResult<AdminDashboardDto>> Admin([FromQuery] DateOnly? date)
         => Ok(await mediator.Send(new GetAdminDashboardQuery(date)));
 
+    // Rule C2/C3 (P12): per-department comparison rows for the SuperAdmin cockpit.
+    [HttpGet("comparison")]
+    [Authorize(Roles = "SuperAdmin,DepartmentAdmin")]
+    public async Task<ActionResult<IReadOnlyList<DepartmentDashboardMetricsDto>>> Comparison([FromQuery] DateOnly? date)
+        => Ok(await mediator.Send(new GetDashboardComparisonQuery(date)));
+
     // A mechanic's own queue (any authenticated user — scoped to the caller in the handler).
     [HttpGet("me")]
     public async Task<ActionResult<MyDashboardDto>> Me()

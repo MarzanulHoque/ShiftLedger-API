@@ -102,6 +102,50 @@ public class DashboardTests(IntegrationTestFixture fixture)
         after.MechanicWorkload.Should().Contain(w => w.MechanicId == mechanicsMechanicId);
     }
 
+    // Rule RB3/RB4 (P12): the comparison rollup splits by department the same way the consolidated
+    // dashboard sums them — asserted via delta so it isn't thrown off by other tests' same-day data.
+    [Fact]
+    public async Task DashboardComparison_SplitsPerDepartment_SuperAdminSeesBoth_DepartmentAdminSeesOwnOnly_RB3()
+    {
+        var superAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
+
+        IReadOnlyList<DepartmentDashboardMetricsDto> before;
+        await using (var ctx = fixture.CreateContext())
+        {
+            before = await new GetDashboardComparisonQueryHandler(ctx, TimeProvider.System, superAdmin)
+                .Handle(new GetDashboardComparisonQuery(null), default);
+        }
+        var beforeMechanics = before.FirstOrDefault(d => d.DepartmentId == DepartmentConfiguration.MechanicsId)?.JobsReceivedToday ?? 0;
+        var beforeWash = before.FirstOrDefault(d => d.DepartmentId == DepartmentConfiguration.BikeWashId)?.JobsReceivedToday ?? 0;
+
+        await using (var ctx = fixture.CreateContext())
+        {
+            var jobs = new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(superAdmin));
+            await jobs.Handle(
+                new CreateJobCommand($"P12 comparison mechanics job {Guid.NewGuid()}", null, "Test bike", null, null, null, null,
+                    DepartmentConfiguration.MechanicsId), default);
+            await jobs.Handle(
+                new CreateJobCommand($"P12 comparison wash job {Guid.NewGuid()}", null, "Test bike", null, null, null, null,
+                    DepartmentConfiguration.BikeWashId), default);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var afterSuper = await new GetDashboardComparisonQueryHandler(verify, TimeProvider.System, superAdmin)
+            .Handle(new GetDashboardComparisonQuery(null), default);
+        var afterMechanics = afterSuper.First(d => d.DepartmentId == DepartmentConfiguration.MechanicsId).JobsReceivedToday;
+        var afterWash = afterSuper.First(d => d.DepartmentId == DepartmentConfiguration.BikeWashId).JobsReceivedToday;
+
+        (afterMechanics - beforeMechanics).Should().Be(1);
+        (afterWash - beforeWash).Should().Be(1);
+
+        var deptAdmin = TestCurrentUser.DepartmentAdmin(Guid.NewGuid(), DepartmentConfiguration.MechanicsId);
+        var deptAdminView = await new GetDashboardComparisonQueryHandler(verify, TimeProvider.System, deptAdmin)
+            .Handle(new GetDashboardComparisonQuery(null), default);
+
+        deptAdminView.Should().ContainSingle();
+        deptAdminView.Single().DepartmentId.Should().Be(DepartmentConfiguration.MechanicsId);
+    }
+
     // Rule R2: /dashboard/me only ever contains the caller's own jobs.
     [Fact]
     public async Task MyDashboard_ContainsOnlyOwnJobs_R2()
