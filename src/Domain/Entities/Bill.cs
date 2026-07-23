@@ -11,8 +11,12 @@ public class Bill : BaseEntity, ISoftDeletable
     // replaces the truncated-GUID trick the invoice PDF used to show.
     public int BillNumber { get; set; }
     public Guid ServiceJobId { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
     public bool IsPaid { get; set; }
     public DateTime? PaidAtUtc { get; set; }
+    // Rule N3: last time an unpaid-past-threshold alert was raised for this bill — guards the
+    // periodic sweep against re-raising the same alert every tick (once per calendar day).
+    public DateTime? LastUnpaidAlertAtUtc { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 }

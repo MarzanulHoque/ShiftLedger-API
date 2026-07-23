@@ -24,7 +24,7 @@ public class BillingTests(IntegrationTestFixture fixture)
     {
         await using var ctx = fixture.CreateContext();
         var jobId = await CreateJobAsync(ctx);
-        var billId = await new CreateBillCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new CreateBillCommand(jobId), default);
+        var billId = await new CreateBillCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()), TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
         return (jobId, billId);
     }
 
@@ -35,7 +35,7 @@ public class BillingTests(IntegrationTestFixture fixture)
         var (jobId, _) = await CreateJobWithBillAsync();
 
         await using var ctx = fixture.CreateContext();
-        var again = () => new CreateBillCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid())).Handle(new CreateBillCommand(jobId), default);
+        var again = () => new CreateBillCommandHandler(ctx, TestCurrentUser.SuperAdmin(Guid.NewGuid()), TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
         await again.Should().ThrowAsync<BusinessRuleException>();
     }
 

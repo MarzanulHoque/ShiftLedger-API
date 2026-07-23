@@ -115,7 +115,7 @@ public class DepartmentIsolationTests(IntegrationTestFixture fixture)
         {
             var jobId = await CreateJobAsync(setup, DepartmentConfiguration.BikeWashId);
             var setupAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
-            billId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(jobId), default);
+            billId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
         }
 
         var deptAdmin = TestCurrentUser.DepartmentAdmin(Guid.NewGuid(), DepartmentConfiguration.MechanicsId);
@@ -140,8 +140,8 @@ public class DepartmentIsolationTests(IntegrationTestFixture fixture)
             var mechanicsJobId = await CreateJobAsync(setup, DepartmentConfiguration.MechanicsId);
             var washJobId = await CreateJobAsync(setup, DepartmentConfiguration.BikeWashId);
             var setupAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
-            mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(mechanicsJobId), default);
-            washBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(washJobId), default);
+            mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(mechanicsJobId), default);
+            washBillId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(washJobId), default);
         }
 
         var deptAdmin = TestCurrentUser.DepartmentAdmin(Guid.NewGuid(), DepartmentConfiguration.MechanicsId);
@@ -163,8 +163,8 @@ public class DepartmentIsolationTests(IntegrationTestFixture fixture)
             var mechanicsJobId = await CreateJobAsync(setup, DepartmentConfiguration.MechanicsId);
             var washJobId = await CreateJobAsync(setup, DepartmentConfiguration.BikeWashId);
             var setupAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
-            mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(mechanicsJobId), default);
-            washBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(washJobId), default);
+            mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(mechanicsJobId), default);
+            washBillId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(washJobId), default);
         }
 
         var superAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
@@ -186,8 +186,8 @@ public class DepartmentIsolationTests(IntegrationTestFixture fixture)
             var setupAdmin = TestCurrentUser.SuperAdmin(Guid.NewGuid());
             var mechanicsJobId = await CreateJobAsync(setup, DepartmentConfiguration.MechanicsId);
             var washJobId = await CreateJobAsync(setup, DepartmentConfiguration.BikeWashId);
-            var mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(mechanicsJobId), default);
-            var washBillId = await new CreateBillCommandHandler(setup, setupAdmin).Handle(new CreateBillCommand(washJobId), default);
+            var mechanicsBillId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(mechanicsJobId), default);
+            var washBillId = await new CreateBillCommandHandler(setup, setupAdmin, TimeProvider.System).Handle(new CreateBillCommand(washJobId), default);
             await new AddLineItemCommandHandler(setup, setupAdmin)
                 .Handle(new AddLineItemCommand(mechanicsBillId, LineItemType.Labor, "Tune-up", 1m, 400m), default);
             await new AddLineItemCommandHandler(setup, setupAdmin)
@@ -216,7 +216,7 @@ public class DepartmentIsolationTests(IntegrationTestFixture fixture)
             var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(superAdmin))
                 .Handle(new CreateJobCommand("Locked bill job", null, "Test bike", JobPriority.Medium, null, null, null,
                     DepartmentConfiguration.MechanicsId), default);
-            billId = await new CreateBillCommandHandler(ctx, superAdmin).Handle(new CreateBillCommand(jobId), default);
+            billId = await new CreateBillCommandHandler(ctx, superAdmin, TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
             await new AddLineItemCommandHandler(ctx, superAdmin)
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Full service", 1m, 1000m), default);
             await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), superAdmin)

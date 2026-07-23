@@ -32,7 +32,7 @@ public class DashboardTests(IntegrationTestFixture fixture)
             var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(scopeAdmin))
                 .Handle(new CreateJobCommand("Dashboard job", null, "Cannondale Trail", null, null, null, null,
                     DepartmentConfiguration.MechanicsId), default);
-            var billId = await new CreateBillCommandHandler(ctx, scopeAdmin).Handle(new CreateBillCommand(jobId), default);
+            var billId = await new CreateBillCommandHandler(ctx, scopeAdmin, TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
             await new AddLineItemCommandHandler(ctx, scopeAdmin)
                 .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Dashboard labor", 1m, 777m), default);
             await new SetBillPaidCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), scopeAdmin)

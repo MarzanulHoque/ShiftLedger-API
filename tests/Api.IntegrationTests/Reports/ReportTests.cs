@@ -19,7 +19,7 @@ public class ReportTests(IntegrationTestFixture fixture)
         var jobId = await new CreateJobCommandHandler(ctx, TimeProvider.System, TestNotifiers.For(ctx), TestDepartmentScope.For(admin))
             .Handle(new CreateJobCommand(title, null, "Test bike", null, null, null, null,
                 DepartmentConfiguration.MechanicsId), default);
-        var billId = await new CreateBillCommandHandler(ctx, admin).Handle(new CreateBillCommand(jobId), default);
+        var billId = await new CreateBillCommandHandler(ctx, admin, TimeProvider.System).Handle(new CreateBillCommand(jobId), default);
         await new AddLineItemCommandHandler(ctx, admin)
             .Handle(new AddLineItemCommand(billId, LineItemType.Labor, "Service", 1m, amount), default);
         if (paid)

@@ -19,6 +19,9 @@ public class ServiceJob : BaseEntity, ISoftDeletable
     public Guid? AssignedMechanicId { get; set; }         // FK User (Employee role)
     public DateOnly ReceivedDate { get; set; }            // calendar date, native DATE (Rule T9)
     public DateOnly? DueDate { get; set; }
+    // Rule N3: last time an overdue alert was raised for this job — guards the periodic sweep
+    // against re-raising the same alert every tick (once per calendar day).
+    public DateTime? LastOverdueAlertAtUtc { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 }

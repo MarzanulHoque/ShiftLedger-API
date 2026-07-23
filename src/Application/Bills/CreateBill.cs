@@ -9,7 +9,8 @@ namespace ShiftLedger.Application.Bills;
 // Create the bill for a job (Admin). Rule B1: a job has exactly one bill.
 public record CreateBillCommand(Guid ServiceJobId) : IRequest<Guid>;
 
-public class CreateBillCommandHandler(IAppDbContext db, ICurrentUser currentUser) : IRequestHandler<CreateBillCommand, Guid>
+public class CreateBillCommandHandler(IAppDbContext db, ICurrentUser currentUser, TimeProvider timeProvider)
+    : IRequestHandler<CreateBillCommand, Guid>
 {
     public async Task<Guid> Handle(CreateBillCommand request, CancellationToken cancellationToken)
     {
@@ -28,7 +29,7 @@ public class CreateBillCommandHandler(IAppDbContext db, ICurrentUser currentUser
             throw new BusinessRuleException("This job already has a bill.");
         }
 
-        var bill = new Bill { ServiceJobId = request.ServiceJobId };
+        var bill = new Bill { ServiceJobId = request.ServiceJobId, CreatedAtUtc = timeProvider.GetUtcNow().UtcDateTime };
         db.Bills.Add(bill);
         await db.SaveChangesAsync(cancellationToken);
         return bill.Id;
