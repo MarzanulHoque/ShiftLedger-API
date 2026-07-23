@@ -134,11 +134,11 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
         var mech2AsUser = TestCurrentUser.Employee(mech2, DepartmentConfiguration.MechanicsId);
 
         var mech1Jobs = await new GetJobsQueryHandler(verify, mech1AsUser)
-            .Handle(new GetJobsQuery(null, null, 1, 100), default);
+            .Handle(new GetJobsQuery(null, null, Page: 1, PageSize: 100), default);
         mech1Jobs.Items.Should().Contain(j => j.Id == jobForMech1);
 
         var mech2Jobs = await new GetJobsQueryHandler(verify, mech2AsUser)
-            .Handle(new GetJobsQuery(null, null, 1, 100), default);
+            .Handle(new GetJobsQuery(null, null, Page: 1, PageSize: 100), default);
         mech2Jobs.Items.Should().NotContain(j => j.Id == jobForMech1);
 
         var openOthers = () => new GetJobQueryHandler(verify, mech2AsUser)
@@ -160,7 +160,7 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
 
         await using var verify = fixture.CreateContext();
         var jobs = await new GetJobsQueryHandler(verify, TestCurrentUser.SuperAdmin(adminId))
-            .Handle(new GetJobsQuery(null, null, 1, 100), default);
+            .Handle(new GetJobsQuery(null, null, Page: 1, PageSize: 100), default);
         jobs.Items.Should().NotContain(j => j.Id == jobId);
     }
 
@@ -181,8 +181,8 @@ public class ServiceJobTests(IntegrationTestFixture fixture)
 
         await using var verify = fixture.CreateContext();
         var admin = TestCurrentUser.SuperAdmin(adminId);
-        var page1 = await new GetJobsQueryHandler(verify, admin).Handle(new GetJobsQuery(null, null, 1, 2), default);
-        var page2 = await new GetJobsQueryHandler(verify, admin).Handle(new GetJobsQuery(null, null, 2, 2), default);
+        var page1 = await new GetJobsQueryHandler(verify, admin).Handle(new GetJobsQuery(null, null, Page: 1, PageSize: 2), default);
+        var page2 = await new GetJobsQueryHandler(verify, admin).Handle(new GetJobsQuery(null, null, Page: 2, PageSize: 2), default);
 
         page1.Items.Should().HaveCount(2);
         page1.TotalCount.Should().BeGreaterThanOrEqualTo(3).And.Be(page2.TotalCount);

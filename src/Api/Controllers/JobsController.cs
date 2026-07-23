@@ -15,9 +15,9 @@ public class JobsController(ISender mediator) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<JobDto>>> Get(
-        [FromQuery] JobStatus? status, [FromQuery] Guid? mechanicId,
+        [FromQuery] JobStatus? status, [FromQuery] Guid? mechanicId, [FromQuery] Guid? departmentId,
         [FromQuery] int? page, [FromQuery] int? pageSize)
-        => Ok(await mediator.Send(new GetJobsQuery(status, mechanicId, page, pageSize)));
+        => Ok(await mediator.Send(new GetJobsQuery(status, mechanicId, departmentId, page, pageSize)));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<JobDto>> GetById(Guid id) => Ok(await mediator.Send(new GetJobQuery(id)));

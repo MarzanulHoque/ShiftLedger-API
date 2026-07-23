@@ -10,7 +10,7 @@ public record JobDto(
     Guid Id, int JobNumber, Guid DepartmentId, string Title, string? Description, string BikeModel, JobStatus Status,
     JobPriority Priority, Guid? AssignedMechanicId, DateOnly ReceivedDate, DateOnly? DueDate);
 
-public record GetJobsQuery(JobStatus? Status, Guid? MechanicId, int? Page = null, int? PageSize = null)
+public record GetJobsQuery(JobStatus? Status, Guid? MechanicId, Guid? DepartmentId = null, int? Page = null, int? PageSize = null)
     : IRequest<PagedResult<JobDto>>;
 
 public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
@@ -32,6 +32,11 @@ public class GetJobsQueryHandler(IAppDbContext db, ICurrentUser currentUser)
             if (!currentUser.IsSuperAdmin)
             {
                 query = query.Where(j => j.DepartmentId == currentUser.DepartmentId);
+            }
+
+            if (request.DepartmentId is { } departmentId)
+            {
+                query = query.Where(j => j.DepartmentId == departmentId);
             }
 
             if (request.MechanicId is { } mechanicId)
